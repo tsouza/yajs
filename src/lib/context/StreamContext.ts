@@ -1,8 +1,8 @@
+import { isEmpty } from 'lodash';
 import { JsonDispatcher } from '../dispatcher/ObjectDispatcher';
 import { PathOperator } from '../path/PathOperator';
 import { YAJSPath } from '../path/YAJSPath';
 import { StreamPosition } from './StreamPosition';
-import { isEmpty } from 'lodash';
 
 export class StreamContext {
 
