@@ -20,7 +20,7 @@ createReadStream('./package.json').
 
 ## Command line tool
 
-call it from a shell:
+Call it from a shell:
 
 ```bash
 $ npm install -g yajs
@@ -45,7 +45,7 @@ YAJS Selector              | Description
 
 Given the following json:
 
-```json
+```js
 {
     "array": [
         {
@@ -73,7 +73,7 @@ $ cat test.json | yajs '$..[!key1]child'
 
 Given the following json:
 
-```json
+```js
 {
     "object1": {
         "key1": "value1",
