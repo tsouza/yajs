@@ -46,16 +46,15 @@ describe('path parser', () => {
     });
 
     it('should parse projection keys', () => {
-        const parser = createParser('$.test{field1 && field2}');
+        const parser = createParser('$.test{field1 field2}');
         const path = parser.path();
 
         // tslint:disable-next-line:no-unused-expression
         expect(path.actionProject()).to.exist;
         const projection = path.actionProject();
         if (projection) {
-            expect(projection.filterExpression().text).to.equal('field1&&field2');
-            const keys = extractKeys(projection.filterExpression());
-            expect(keys).to.deep.equal(['field1', 'field2']);
+            expect(projection.projectExpression().Identifier().
+                map((i) => i.text)).to.be.deep.equal(['field1', 'field2']);
         }
     });
 });

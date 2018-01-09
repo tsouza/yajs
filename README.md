@@ -40,8 +40,8 @@ YAJS Selector              | Description
 `*`                        | Wildcard matching all objects/elements regardless
 `.`                        | Child member operator
 `..`                       | Recursive descendant operator
-`..[<path filter>]<key>`   | Recursive descendant operator if path filter evaluates to true (see example below)
-`<key>{keys filter>}`      | Will emit only if keys filter evaluates to true. Only supported in the end of the expression (see example below)
+`..[<path filter>]<key>`   | Recursive descendant operator with path filter (see example below)
+`<key>{<projection keys>}` | Will pick specified keys. Only supported in the end of the expression (see example below)
 
 ### Example of `..[<filter keys>]<key>`
 

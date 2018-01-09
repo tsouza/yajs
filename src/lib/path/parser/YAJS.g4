@@ -18,7 +18,7 @@ actionFilter
   ;
 
 actionProject
-  : LB filterExpression RB
+  : LB projectExpression RB
   ;
 
 projectExpression

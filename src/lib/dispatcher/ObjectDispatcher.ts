@@ -1,34 +1,26 @@
 import { isEmpty, pick } from 'lodash';
-import { VM } from 'vm2';
 import { AbstractObjectBuilder } from './AbstractObjectBuilder';
 
 export class JsonDispatcher extends AbstractObjectBuilder {
 
     private listener?: (value?: any) => void;
-    private projectExpression: string;
-    private projectKeys: string[];
+    private projectionKeys?: string[];
 
-    constructor(listener: (value?: any) => void, projectExpression: string = '', projectKeys: string[] = []) {
+    constructor(listener: (value?: any) => void, projectionKeys?: string[]) {
         super();
         this.listener = listener;
-        this.projectExpression = projectExpression;
-        this.projectKeys = projectKeys;
+        this.projectionKeys = projectionKeys;
     }
 
     endObject(): boolean {
         this.doEndObject();
         if (this.isInRoot()) {
-            const result: any = this.peek().value;
+            let result: any = this.peek().value;
             if (this.listener) {
-                if (!isEmpty(this.projectExpression)) {
-                    const sandbox = this._createSandbox(result);
-                    const filter = this._createFilterScript(sandbox);
-                    if (filter()) {
-                        this.listener(result);
-                    }
-                } else {
-                    this.listener(result);
+                if (this.projectionKeys && !isEmpty(this.projectionKeys)) {
+                    result = pick(result, this.projectionKeys);
                 }
+                this.listener(result);
             }
             this.clear();
             return true;
@@ -51,16 +43,5 @@ export class JsonDispatcher extends AbstractObjectBuilder {
     clear(): void {
         super.clear();
         this.listener = undefined;
-    }
-
-    private _createSandbox(object: object): object {
-        const result = {};
-        this.projectKeys.forEach((k) => result[k] = k in object);
-        return result;
-    }
-
-    private _createFilterScript(sandbox: object): () => boolean {
-        return new VM({ sandbox }).
-            run(`() => ${this.projectExpression}`);
     }
 }

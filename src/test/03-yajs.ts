@@ -59,12 +59,12 @@ describe('yajs', () => {
                 }));
 
     it('should access in nested array with filtering and projection', () =>
-            test('ndjson', '$..[nested1]nested3{prop1 && prop2}').
+            test('ndjson', '$..[nested1]nested3{prop1}').
                 then((array) => {
                     expect(array).to.be.lengthOf(3);
                     array.forEach((entry) => expect(entry).to.be.deep.equal({
                         path: ['nested1', 'nested2', 'nested3'],
-                        value: { prop1: 'value1', prop2: 'value2' }}));
+                        value: { prop1: 'value1' }}));
                 }));
 });
 

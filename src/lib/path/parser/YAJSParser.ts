@@ -262,7 +262,7 @@ export class YAJSParser extends Parser {
 			this.state = 45;
 			this.match(YAJSParser.LB);
 			this.state = 46;
-			this.filterExpression();
+			this.projectExpression();
 			this.state = 47;
 			this.match(YAJSParser.RB);
 			}
@@ -455,7 +455,7 @@ export class YAJSParser extends Parser {
 		"\x06\x04\x02&\x05\x03\x02\x02\x02\'*\x07\x0F\x02\x02(*\x07\x03\x02\x02"+
 		")\'\x03\x02\x02\x02)(\x03\x02\x02\x02*\x07\x03\x02\x02\x02+,\x07\r\x02"+
 		"\x02,-\x05\x0E\b\x02-.\x07\x0E\x02\x02.\t\x03\x02\x02\x02/0\x07\v\x02"+
-		"\x0201\x05\x0E\b\x0212\x07\f\x02\x022\v\x03\x02\x02\x0235\x07\x03\x02"+
+		"\x0201\x05\f\x07\x0212\x07\f\x02\x022\v\x03\x02\x02\x0235\x07\x03\x02"+
 		"\x0243\x03\x02\x02\x0256\x03\x02\x02\x0264\x03\x02\x02\x0267\x03\x02\x02"+
 		"\x027\r\x03\x02\x02\x028:\x05\x10\t\x0298\x03\x02\x02\x02:;\x03\x02\x02"+
 		"\x02;9\x03\x02\x02\x02;<\x03\x02\x02\x02<\x0F\x03\x02\x02\x02=>\t\x02"+
@@ -573,8 +573,8 @@ export class ActionFilterContext extends ParserRuleContext {
 
 export class ActionProjectContext extends ParserRuleContext {
 	public LB(): TerminalNode { return this.getToken(YAJSParser.LB, 0); }
-	public filterExpression(): FilterExpressionContext {
-		return this.getRuleContext(0, FilterExpressionContext);
+	public projectExpression(): ProjectExpressionContext {
+		return this.getRuleContext(0, ProjectExpressionContext);
 	}
 	public RB(): TerminalNode { return this.getToken(YAJSParser.RB, 0); }
 	constructor(parent: ParserRuleContext, invokingState: number);
