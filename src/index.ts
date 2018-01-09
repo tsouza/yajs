@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import yajs from './yajs';
 
 const path = findPath();

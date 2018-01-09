@@ -1,11 +1,11 @@
 {
   "name": "yajson-stream",
-  "version": "1.0.0-beta1",
+  "version": "1.0.0-beta8",
   "description": "Yet Another JSON Streaming Tool",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
     "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/lib/path/parser/YAJS.g4",
-    "prepublishOnly": "gulp clean && gulp compile"
+    "prepare": "gulp clean && gulp compile"
   },
   "repository": {
     "type": "git",
