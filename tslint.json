@@ -1,0 +1,16 @@
+{
+    "defaultSeverity": "error",
+    "extends": [
+        "tslint:recommended"
+    ],
+    "jsRules": {},
+    "rules": {
+        "member-access": [true, "no-public"],
+        "quotemark": [true, "single"],
+        "no-namespace": false
+    },
+    "rulesDirectory": [],
+    "linterOptions": {
+        "exclude": "src/lib/path/parser/*.ts"
+    }
+}

@@ -1,0 +1,47 @@
+{
+  "name": "yajs",
+  "version": "1.0.0-alpha",
+  "description": "Yet Another JSON Streamer",
+  "main": "index.js",
+  "scripts": {
+    "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'test/**/*.ts'",
+    "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/lib/path/parser/YAJS.g4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tsouza/yajs.git"
+  },
+  "keywords": [
+    "json",
+    "stream"
+  ],
+  "author": "Thiago Souza",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tsouza/yajs/issues"
+  },
+  "homepage": "https://github.com/tsouza/yajs#readme",
+  "dependencies": {
+    "@types/jsonpath": "^0.2.0",
+    "@types/lodash": "^4.14.92",
+    "antlr4": "^4.7.1",
+    "antlr4ts": "^0.4.1-alpha.0",
+    "lodash": "^4.17.4",
+    "stream-json": "^0.5.2",
+    "ts-iterable": "^1.0.1",
+    "vm2": "^3.5.2"
+  },
+  "devDependencies": {
+    "@types/bluebird": "^3.5.19",
+    "@types/chai": "^4.0.10",
+    "@types/mocha": "^2.2.45",
+    "antlr4ts-cli": "^0.4.0-alpha.4",
+    "bluebird": "^3.5.1",
+    "chai": "^4.1.2",
+    "gulp": "^3.9.1",
+    "gulp-typescript": "^3.2.3",
+    "mocha": "^4.0.1",
+    "ts-node": "^4.1.0",
+    "typescript": "^2.6.2"
+  }
+}
