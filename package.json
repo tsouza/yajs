@@ -4,7 +4,7 @@
   "description": "Yet Another JSON Streaming Tool",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
-    "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/lib/path/parser/YAJS.g4",
+    "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/main/lib/path/parser/YAJS.g4",
     "prepare": "gulp clean && gulp compile"
   },
   "repository": {

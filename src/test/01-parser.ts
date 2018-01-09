@@ -2,9 +2,9 @@
 
 import { ANTLRInputStream, CommonTokenStream } from 'antlr4ts';
 
-import { extractKeys } from '../lib/path/parser/utils';
-import { YAJSLexer } from '../lib/path/parser/YAJSLexer';
-import { YAJSParser } from '../lib/path/parser/YAJSParser';
+import { extractKeys } from '../main/lib/path/parser/utils';
+import { YAJSLexer } from '../main/lib/path/parser/YAJSLexer';
+import { YAJSParser } from '../main/lib/path/parser/YAJSParser';
 
 import { expect } from 'chai';
 

@@ -4,7 +4,7 @@ import { all } from 'bluebird';
 import { expect } from 'chai';
 import { createReadStream } from 'fs';
 
-import yajs from '../yajs';
+import yajs from '../main/yajs';
 
 describe('yajs', () => {
 

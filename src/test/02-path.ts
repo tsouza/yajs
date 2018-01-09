@@ -1,7 +1,7 @@
 /* tslint-env mocha */
 
 import { expect } from 'chai';
-import { YAJSPath } from '../lib/path/YAJSPath';
+import { YAJSPath } from '../main/lib/path/YAJSPath';
 
 describe('path match', () => {
 
