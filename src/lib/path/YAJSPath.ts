@@ -7,7 +7,7 @@ import { Root } from './operator/Root';
 import { Wildcard } from './operator/Wildcard';
 import { extractKeys } from './parser/utils';
 import { YAJSLexer } from './parser/YAJSLexer';
-import { PathStepContext, ProjectExpressionContext, YAJSParser } from './parser/YAJSParser';
+import { ActionProjectContext, PathStepContext, ProjectExpressionContext, YAJSParser } from './parser/YAJSParser';
 import { PathOperator } from './PathOperator';
 import { PathParent } from './PathParent';
 
@@ -16,14 +16,17 @@ export class YAJSPath extends Iterable<PathOperator> {
     protected operators: PathOperator[];
     protected size: number = 0;
 
-    private mProjectionKeys: string[];
+    private mProjectExpr: string;
+    private mProjectKeys: string[];
+
     private mDefinite = true;
     private mMinimumDepth = 0;
 
-    constructor(operators: PathOperator[] = [], projectionKeys: string[] = []) {
+    constructor(operators: PathOperator[] = [], projectExpression: string = '', projectKeys: string[] = []) {
         super();
         this.operators = [];
-        this.mProjectionKeys = projectionKeys;
+        this.mProjectExpr = projectExpression;
+        this.mProjectKeys = projectKeys;
 
         [ new Root() ].concat(operators).
             forEach((op) => this.push(op));
@@ -104,9 +107,14 @@ export class YAJSPath extends Iterable<PathOperator> {
             this.mMinimumDepth;
     }
 
-    get projectionKeys(): string[] {
-        return this.mProjectionKeys;
+    get projectExpression(): string {
+        return this.mProjectExpr;
     }
+
+    get projectKeys(): string[] {
+        return this.mProjectKeys;
+    }
+
     protected current(key: number): PathOperator {
         return this.operators[key];
     }
@@ -133,7 +141,8 @@ export namespace YAJSPath {
 
         private operators: PathOperator[] = [];
 
-        private projectionKeys?: string[];
+        private projectExpression: string;
+        private projectKeys: string[];
 
         addChild(key: string, filterExpression?: string, filterKeys?: string[]): Builder {
             this.operators.push(new ChildNode(key, filterExpression, filterKeys));
@@ -153,15 +162,16 @@ export namespace YAJSPath {
             return this;
         }
 
-        setProjection(...keys: string[]): Builder {
-            this.projectionKeys = keys;
+        setProjection(projectExpression: string, projectKeys: string[]): Builder {
+            this.projectExpression = projectExpression;
+            this.projectKeys = projectKeys;
             return this;
         }
 
         build(): YAJSPath {
             const operators = this.operators;
             this.operators = [];
-            return new YAJSPath(operators, this.projectionKeys);
+            return new YAJSPath(operators, this.projectExpression, this.projectKeys);
         }
     }
 
@@ -210,8 +220,8 @@ export namespace YAJSPath {
             return this.builder;
         }
 
-        visitProjectExpression(ctx: ProjectExpressionContext): YAJSPath.Builder {
-            this.builder.setProjection(...ctx.Identifier().map((i) => i.text));
+        visitActionProject(ctx: ActionProjectContext): YAJSPath.Builder {
+            this.builder.setProjection(ctx.filterExpression().text, extractKeys(ctx.filterExpression()));
             return this.builder;
         }
 

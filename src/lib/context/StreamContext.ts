@@ -2,6 +2,7 @@ import { JsonDispatcher } from '../dispatcher/ObjectDispatcher';
 import { PathOperator } from '../path/PathOperator';
 import { YAJSPath } from '../path/YAJSPath';
 import { StreamPosition } from './StreamPosition';
+import { isEmpty } from 'lodash';
 
 export class StreamContext {
 
@@ -94,16 +95,18 @@ export class StreamContext {
     }
 
     onValue(value: any): void {
-        const currentNode = this.position.peek();
-        switch (currentNode.getType()) {
-            case PathOperator.Type.OBJECT:
-            case PathOperator.Type.ARRAY:
-                this.match(value);
-                break;
-            case PathOperator.Type.ROOT:
-                break;
-            default:
-                throw new Error();
+        if (isEmpty(this.path.projectExpression)) {
+            const currentNode = this.position.peek();
+            switch (currentNode.getType()) {
+                case PathOperator.Type.OBJECT:
+                case PathOperator.Type.ARRAY:
+                    this.match(value);
+                    break;
+                case PathOperator.Type.ROOT:
+                    break;
+                default:
+                    throw new Error();
+            }
         }
         this.dispatch((dispatcher) => {
             dispatcher.onValue(value);
@@ -119,7 +122,8 @@ export class StreamContext {
                     this.listener(value);
                 } else {
                     this.dispatchers.push(new JsonDispatcher(this.listener,
-                        this.path.projectionKeys));
+                        this.path.projectExpression,
+                        this.path.projectKeys));
                 }
             }
         }
