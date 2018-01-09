@@ -1,7 +1,7 @@
 {
   "name": "yajs",
   "version": "1.0.0-beta1",
-  "description": "Yet Another JSON Streamer",
+  "description": "Yet Another JSON Streaming Tool",
   "main": "index.js",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
