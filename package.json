@@ -1,6 +1,6 @@
 {
   "name": "yajson-stream",
-  "version": "1.0.0-beta8",
+  "version": "1.0.0-beta9",
   "description": "Yet Another JSON Streaming Tool",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
