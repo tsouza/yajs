@@ -4,7 +4,7 @@ YAJS is a tool for filtering a portion of json files.
 
 ## Example
 
-Pipe a text stream of json into YAJS and select 2 properties
+Pipe a text stream of json into YAJS and select 'author' property:
 
 ```js
 const yajs = require('yajs');
