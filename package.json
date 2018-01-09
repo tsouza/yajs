@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
-    "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/lib/path/parser/YAJS.g4"
+    "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/lib/path/parser/YAJS.g4",
+    "prepublishOnly": "gulp clean && gulp compile"
   },
   "repository": {
     "type": "git",
@@ -21,7 +22,7 @@
     "url": "https://github.com/tsouza/yajs/issues"
   },
   "bin": {
-      "yajs": "dist/index.js"
+    "yajs": "dist/index.js"
   },
   "homepage": "https://github.com/tsouza/yajs#readme",
   "dependencies": {
@@ -43,6 +44,7 @@
     "babel-preset-env": "^1.6.1",
     "bluebird": "^3.5.1",
     "chai": "^4.1.2",
+    "del": "^3.0.0",
     "gulp": "^3.9.1",
     "gulp-babel": "^7.0.0",
     "gulp-typescript": "^3.2.3",
