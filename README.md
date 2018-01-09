@@ -9,7 +9,7 @@ YAJS is a tool for filtering a portion of json files.
 Pipe a text stream of json into YAJS and select 'author' property:
 
 ```js
-const yajs = require('yajs');
+const yajs = require('yajson-stream');
 const { createReadStream } = require('fs');
 
 createReadStream('./package.json').
@@ -25,7 +25,7 @@ createReadStream('./package.json').
 Call it from a shell:
 
 ```bash
-$ npm install -g yajs
+$ npm install -g yajson-stream
 $ cat package.json | yajs '$.author'
 "Thiago Souza <thiago@elastic.co>"
 ```
