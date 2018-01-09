@@ -1,5 +1,7 @@
 # YAJS: **Y**et **A**nother **J**SON **S**treaming Tool
 
+<a href="https://travis-ci.org/tsouza/yajs/builds"><img src="https://travis-ci.org/tsouza/yajs.svg?branch=master"></a>
+
 YAJS is a tool for filtering a portion of json files.
 
 ## Example
