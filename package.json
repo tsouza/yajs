@@ -4,7 +4,7 @@
   "description": "Yet Another JSON Streamer",
   "main": "index.js",
   "scripts": {
-    "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'test/**/*.ts'",
+    "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
     "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/lib/path/parser/YAJS.g4"
   },
   "repository": {
