@@ -1,4 +1,4 @@
-// Generated from src/lib/path/parser/YAJS.g4 by ANTLR 4.6-SNAPSHOT
+// Generated from src/main/lib/path/parser/YAJS.g4 by ANTLR 4.6-SNAPSHOT
 
 
 import { ParseTreeVisitor } from 'antlr4ts/tree/ParseTreeVisitor';
@@ -8,7 +8,6 @@ import { PathStepContext } from './YAJSParser';
 import { ActionFieldContext } from './YAJSParser';
 import { ActionFilterContext } from './YAJSParser';
 import { ActionProjectContext } from './YAJSParser';
-import { ProjectExpressionContext } from './YAJSParser';
 import { FilterExpressionContext } from './YAJSParser';
 import { FilterExpressionTermContext } from './YAJSParser';
 
@@ -55,13 +54,6 @@ export interface YAJSVisitor<Result> extends ParseTreeVisitor<Result> {
 	 * @return the visitor result
 	 */
 	visitActionProject?: (ctx: ActionProjectContext) => Result;
-
-	/**
-	 * Visit a parse tree produced by `YAJSParser.projectExpression`.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	visitProjectExpression?: (ctx: ProjectExpressionContext) => Result;
 
 	/**
 	 * Visit a parse tree produced by `YAJSParser.filterExpression`.

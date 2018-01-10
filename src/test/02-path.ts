@@ -74,7 +74,8 @@ describe('path match', () => {
 
             const descendant3 = new YAJSPath.Builder().
                 addDescendant().
-                addChild('prop3', 'prop1 && prop2', [ 'prop1', 'prop2' ]).
+                addChild('prop3', 'args[\'prop1\'] && args[\'prop2\']',
+                    [ 'prop1', 'prop2' ]).
                 build();
 
             expect(descendant1.match(path1)).to.equal(true);

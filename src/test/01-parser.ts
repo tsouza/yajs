@@ -2,7 +2,7 @@
 
 import { ANTLRInputStream, CommonTokenStream } from 'antlr4ts';
 
-import { extractKeys } from '../main/lib/path/parser/utils';
+import { buildArgsExpression, extractKeys } from '../main/lib/path/parser/utils';
 import { YAJSLexer } from '../main/lib/path/parser/YAJSLexer';
 import { YAJSParser } from '../main/lib/path/parser/YAJSParser';
 
@@ -31,7 +31,7 @@ describe('path parser', () => {
     });
 
     it('should parse child filtered', () => {
-        const parser = createParser('$.[field1 && field2]test');
+        const parser = createParser('$.[test.field1 && .field2]test');
         const path = parser.path();
 
         expect(path.pathStep()).to.have.lengthOf(1);
@@ -39,9 +39,11 @@ describe('path parser', () => {
         expect(path.pathStep()[0].actionFilter()).to.exist;
         const filter = path.pathStep()[0].actionFilter();
         if (filter) {
-            expect(filter.filterExpression().text).to.equal('field1&&field2');
+            expect(filter.filterExpression().text).to.equal('test.field1&&.field2');
             const keys = extractKeys(filter.filterExpression());
-            expect(keys).to.deep.equal(['field1', 'field2']);
+            expect(keys).to.deep.equal(['test.field1', '.field2']);
+            const argsExpr = buildArgsExpression(filter.filterExpression());
+            expect(argsExpr).to.be.equal('args[\'test.field1\']&&args[\'.field2\']');
         }
     });
 

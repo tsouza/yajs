@@ -5,9 +5,9 @@ import { ChildNode } from './operator/ChildNode';
 import { Descendant } from './operator/Descendant';
 import { Root } from './operator/Root';
 import { Wildcard } from './operator/Wildcard';
-import { extractKeys } from './parser/utils';
+import { buildArgsExpression, extractKeys } from './parser/utils';
 import { YAJSLexer } from './parser/YAJSLexer';
-import { ActionProjectContext, PathStepContext, ProjectExpressionContext, YAJSParser } from './parser/YAJSParser';
+import { ActionProjectContext, PathStepContext, YAJSParser } from './parser/YAJSParser';
 import { PathOperator } from './PathOperator';
 import { PathParent } from './PathParent';
 
@@ -207,7 +207,7 @@ export namespace YAJSPath {
             let filterKeys;
 
             if (actionFilter) {
-                filterExpression = actionFilter.filterExpression().text;
+                filterExpression = buildArgsExpression(actionFilter.filterExpression());
                 filterKeys = extractKeys(actionFilter.filterExpression());
             }
 
@@ -221,7 +221,9 @@ export namespace YAJSPath {
         }
 
         visitActionProject(ctx: ActionProjectContext): YAJSPath.Builder {
-            this.builder.setProjection(ctx.filterExpression().text, extractKeys(ctx.filterExpression()));
+            this.builder.setProjection(
+                buildArgsExpression(ctx.filterExpression()),
+                extractKeys(ctx.filterExpression()));
             return this.builder;
         }
 

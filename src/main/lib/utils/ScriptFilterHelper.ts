@@ -1,17 +1,19 @@
 import { isEmpty } from 'lodash';
 import { VM, VMScript } from 'vm2';
 
+const vm = new VM();
+
 export class ScriptFilterHelper {
 
     private expression?: string;
     private keys: string[];
 
-    private script?: VMScript;
+    private filter?: (args: object) => boolean;
 
     constructor(keys: string[], expression?: string) {
         if (expression) {
-            this.script = this.isBooleanExpression(expression) ?
-                new VMScript(`() => ${expression}`, '') :
+            this.filter = this.isBooleanExpression(expression) ?
+                vm.run(`(args) => ${expression}`) :
                 null;
             this.keys = keys;
         }
@@ -22,23 +24,22 @@ export class ScriptFilterHelper {
     }
 
     filters(keyVerifier: (key) => boolean): boolean {
-        return this._createFilter(keyVerifier)();
+        const args = this.filter ? this._createArgs(keyVerifier) : null;
+        return this._createFilter(keyVerifier)(args);
     }
 
-    private _createSandbox(keyVerifier: (key) => boolean): object {
-        const sandbox = {};
+    private _createArgs(keyVerifier: (key) => boolean): object {
+        const args = {};
         if (this.keys) {
             this.keys.forEach((key) =>
-                sandbox[key] = keyVerifier(key));
+                args[key] = keyVerifier(key));
         }
-        return sandbox;
+        return args;
     }
 
-    private _createFilter(keyVerifier: (key) => boolean): () => boolean {
-        if (this.script) {
-            const sandbox = this._createSandbox(keyVerifier);
-            return new VM({ sandbox }).
-                run(this.script);
+    private _createFilter(keyVerifier: (key) => boolean): (args: object) => boolean {
+        if (this.filter) {
+           return this.filter;
         } else {
             return () => this.keys.
                 some((key) => keyVerifier(key));
