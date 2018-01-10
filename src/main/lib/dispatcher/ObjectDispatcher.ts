@@ -19,9 +19,10 @@ export class JsonDispatcher extends AbstractObjectBuilder {
         if (this.isInRoot()) {
             const result: any = this.peek().value;
             if (this.listener) {
-                if (this.filterHelper.isFiltered() &&
-                    this.filterHelper.filters((key) => key in result)) {
+                if (this.filterHelper.isFiltered()) {
+                    if (this.filterHelper.filters((key) => key in result)) {
                         this.listener(result);
+                    }
                 } else {
                     this.listener(result);
                 }
