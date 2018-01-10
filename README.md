@@ -34,14 +34,14 @@ $ cat package.json | yajs '$.author'
 
 YAJS selector syntax is jsonpath-like, yet it's **not** jsonpath.
 
-YAJS Selector              | Description
----------------------------|------------
-`$`                        | The root object/element
-`*`                        | Wildcard matching all objects/elements regardless
-`.`                        | Child member operator
-`..`                       | Recursive descendant operator
-`..[<path filter>]<key>`   | Recursive descendant operator if path filter evaluates to true (see example below)
-`<key>{keys filter>}`      | Will emit only if keys filter evaluates to true. Only supported in the end of the expression (see example below)
+YAJS Selector                    | Description
+---------------------------------|------------
+`$`                              | The root object/element
+`*`                              | Wildcard matching all objects/elements regardless
+`.`                              | Child member operator
+`..`                             | Recursive descendant operator
+`..[<path filter>]<key>`         | Recursive descendant operator if path filter evaluates to true (see example below)
+`<key>{keys filter>}`            | Will emit only if keys filter evaluates to true. Only supported in the end of the expression (see example below)
 
 ### Example of `..[<filter keys>]<key>`
 
