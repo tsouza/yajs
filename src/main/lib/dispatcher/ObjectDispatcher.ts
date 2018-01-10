@@ -1,18 +1,23 @@
 import { isEmpty, pick } from 'lodash';
-import { VM } from 'vm2';
+import { VM, VMScript } from 'vm2';
 import { AbstractObjectBuilder } from './AbstractObjectBuilder';
 
 export class JsonDispatcher extends AbstractObjectBuilder {
 
     private listener?: (value?: any) => void;
-    private projectExpression: string;
+
+    private script?: any;
     private projectKeys: string[];
 
     constructor(listener: (value?: any) => void, projectExpression: string = '', projectKeys: string[] = []) {
         super();
         this.listener = listener;
-        this.projectExpression = projectExpression;
-        this.projectKeys = projectKeys;
+        if (projectExpression) {
+            this.script = this.isBooleanExpression(projectExpression) ?
+                new VMScript(`() => ${projectExpression}`, '') :
+                null;
+            this.projectKeys = projectKeys;
+        }
     }
 
     endObject(): boolean {
@@ -20,9 +25,8 @@ export class JsonDispatcher extends AbstractObjectBuilder {
         if (this.isInRoot()) {
             const result: any = this.peek().value;
             if (this.listener) {
-                if (!isEmpty(this.projectExpression)) {
-                    const sandbox = this._createSandbox(result);
-                    const filter = this._createFilterScript(sandbox);
+                if (!isEmpty(this.projectKeys)) {
+                    const filter = this._createFilter(result);
                     if (filter()) {
                         this.listener(result);
                     }
@@ -59,8 +63,18 @@ export class JsonDispatcher extends AbstractObjectBuilder {
         return result;
     }
 
-    private _createFilterScript(sandbox: object): () => boolean {
-        return new VM({ sandbox }).
-            run(`() => ${this.projectExpression}`);
+    private _createFilter(result: object): () => boolean {
+        if (this.script) {
+            const sandbox = this._createSandbox(result);
+            return new VM({ sandbox }).
+                run(this.script);
+        } else {
+            return () => this.projectKeys.
+                every((key) => key in result);
+        }
+    }
+
+    private isBooleanExpression(expr: string): boolean {
+        return /[a-zA-Z0-9\s]+/.exec(expr) === null;
     }
 }

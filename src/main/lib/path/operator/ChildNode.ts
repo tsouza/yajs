@@ -15,7 +15,7 @@ export class ChildNode extends AbstractFilteredOperator {
             return true;
         }
         const matched = super.match(operator) && this.key === (operator as ChildNode).key;
-        if (matched && this.filterExpression) {
+        if (matched && this.filterKeys) {
             return this.matchFilter(operator);
         }
         return matched;

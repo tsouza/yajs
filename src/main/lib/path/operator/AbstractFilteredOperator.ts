@@ -1,24 +1,27 @@
-import { VM } from 'vm2';
+import { VM, VMScript } from 'vm2';
 import { PathOperator } from '../PathOperator';
 
 export abstract class AbstractFilteredOperator extends PathOperator {
 
-    protected filterExpression?: string;
-    private filterKeys?: string[];
+    protected filterKeys?: string[];
+    private script?: any;
 
     constructor(filterExpression?: string, filterKeys?: string[]) {
         super();
-        this.filterExpression = filterExpression;
-        this.filterKeys = filterKeys;
+        if (filterExpression) {
+            this.script = this.isBooleanExpression(filterExpression) ?
+                new VMScript(`() => ${filterExpression}`, '') :
+                null;
+            this.filterKeys = filterKeys;
+        }
     }
 
     protected matchFilter(operator: PathOperator): boolean {
-        if (!this.filterExpression) {
+        if (!this.filterKeys) {
             throw new Error('Filter not defined');
         }
 
-        const sandbox = this._createSandbox(operator);
-        const filter = this._createFilterScript(sandbox);
+        const filter = this._createFilter(operator);
 
         return filter();
     }
@@ -32,8 +35,18 @@ export abstract class AbstractFilteredOperator extends PathOperator {
         return result;
     }
 
-    private _createFilterScript(sandbox: any) {
-        return new VM({ sandbox }).
-            run(`() => ${this.filterExpression}`);
+    private _createFilter(operator: PathOperator): () => boolean {
+        if (this.script) {
+            const sandbox = this._createSandbox(operator);
+            return new VM({ sandbox }).
+                run(this.script);
+        } else {
+            return () => this.filterKeys.
+                every((key) => operator.referencedBy(key));
+        }
+    }
+
+    private isBooleanExpression(expr: string): boolean {
+        return /[a-zA-Z0-9\s]+/.exec(expr) === null;
     }
 }
