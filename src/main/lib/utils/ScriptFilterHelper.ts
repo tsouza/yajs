@@ -46,6 +46,6 @@ export class ScriptFilterHelper {
     }
 
     private isBooleanExpression(expr: string): boolean {
-        return /[_a-zA-Z0-9\s]+/.exec(expr) === null;
+        return !expr.match(/^[_a-z0-9\s]+$/g);
     }
 }
