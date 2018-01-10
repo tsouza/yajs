@@ -41,7 +41,7 @@ YAJS Selector                    | Description
 `.`                              | Child member operator
 `..`                             | Recursive descendant operator
 `..[<path filter>]<key>`         | Recursive descendant operator if path filter evaluates to true (see example below)
-`<key>{keys filter>}`            | Will emit only if keys filter evaluates to true. Only supported in the end of the expression (see example below)
+`<key>{keys filter}`             | Will emit only if keys filter evaluates to true. Only supported in the end of the expression (see example below)
 
 ### Example of `..[<filter keys>]<key>`
 
@@ -71,7 +71,7 @@ $ cat test.json | yajs '$..[!key1]child'
 "value2"
 ```
 
-### Example of `<key>{<projection keys>}`
+### Example of `<key>{<keys filter>}`
 
 Given the following json:
 
