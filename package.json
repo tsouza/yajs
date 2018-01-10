@@ -1,6 +1,6 @@
 {
   "name": "yajson-stream",
-  "version": "1.0.0-rc1",
+  "version": "1.0.0-rc2",
   "description": "Yet Another JSON Streaming Tool",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
@@ -20,6 +20,7 @@
   "bugs": {
     "url": "https://github.com/tsouza/yajs/issues"
   },
+  "main": "dist/main/yajs.js",
   "bin": {
     "yajs": "dist/main/index.js"
   },
