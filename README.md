@@ -76,20 +76,25 @@ $ cat test.json | yajs '$..[!key1]child'
 Given the following json:
 
 ```js
-{
-    "object1": {
-        "key1": "value1",
-        "key2": "value2",
-        "key3": "value2"
+[
+    {
+        "object1": {
+            "key1": "value1"
+        }
+    },
+    {
+        "object1": {
+            "key2": "value1"
+        }
     }
-}
+]
 ```
 
-Pick only the `key1` field with:
+Will emit only the first `object1`:
 
 ```bash
-$ cat test.json | yajs '$.object1{key1 key3}'
-{"key1":"value1","key3":"value2"}
+$ cat test.json | yajs '$.object1{key1}'
+{"key1":"value1"}
 ```
 
 ## Bugs and Feedback
