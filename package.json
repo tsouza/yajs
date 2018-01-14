@@ -20,9 +20,9 @@
   "bugs": {
     "url": "https://github.com/tsouza/yajs/issues"
   },
-  "main": "dist/main/yajs.js",
+  "main": "dist/yajs.js",
   "bin": {
-    "yajs": "dist/main/index.js"
+    "yajs": "dist/index.js"
   },
   "homepage": "https://github.com/tsouza/yajs#readme",
   "dependencies": {
@@ -39,16 +39,22 @@
     "@types/bluebird": "^3.5.19",
     "@types/chai": "^4.1.0",
     "@types/mocha": "^2.2.46",
+    "JSONStream": "^1.3.2",
     "antlr4ts-cli": "^0.4.0-canary.37504efa",
+    "ascii-table": "0.0.9",
     "babel-cli": "^6.26.0",
     "babel-preset-env": "^1.6.1",
     "bluebird": "^3.5.1",
     "chai": "^4.1.2",
     "del": "^3.0.0",
+    "fast-stats": "0.0.3",
     "gulp": "^3.9.1",
     "gulp-babel": "^7.0.0",
     "gulp-typescript": "^3.2.3",
+    "measured": "^1.1.0",
+    "memwatch-next": "^0.3.0",
     "mocha": "^4.1.0",
+    "oboe": "^2.1.4",
     "ts-node": "^4.1.0",
     "typescript": "^2.6.2"
   }

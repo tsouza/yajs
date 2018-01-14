@@ -95,8 +95,14 @@ typings/
 package-lock.json
 
 ### VisualStudioCode ###
-.vscode/*
+.vscode
+.ts-node
 .history
 
+# build
+dist
+src
+
+##
 
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode

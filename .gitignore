@@ -95,7 +95,8 @@ typings/
 package-lock.json
 
 ### VisualStudioCode ###
-.vscode/*
+.vscode
+.ts-node
 .history
 
 # build
