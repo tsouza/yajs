@@ -10,9 +10,9 @@ then(() => benchmark('jsonstream', 1, 'field2.nested.*', tableDataset1)).
 then(() => benchmark('oboe', 1, '!.field2.nested[*]', tableDataset1)).
 then(() => console.log(tableDataset1.toString())).
 
-then(() => benchmark('yajs', 2, '$.field2.nested', tableDataset2)).
-then(() => benchmark('jsonstream', 2, 'field2.nested.*', tableDataset2)).
-then(() => benchmark('oboe', 2, '!.field2.nested[*]', tableDataset2)).
+then(() => benchmark('yajs', 2, '$..plugins', tableDataset2)).
+then(() => benchmark('jsonstream', 2, '_source..plugins.*', tableDataset2)).
+then(() => benchmark('oboe', 2, '!._source..plugins[*]', tableDataset2)).
 then(() => console.log(tableDataset2.toString()));
 
 function benchmark(bench: string, dataset: number, path: string, table: object): Promise<void> {
