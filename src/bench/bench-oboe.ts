@@ -18,7 +18,7 @@ oboe(stream).
     // tslint:disable-next-line:no-console
     fail((err) => console.error(err.stack)).
     done(() => {
-        if (counter++ === max) {
+        if (++counter >= max) {
             process.send({ end: true });
         }
     });
