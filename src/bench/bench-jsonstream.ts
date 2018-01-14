@@ -5,7 +5,7 @@ import { Meter } from 'measured';
 import { createGunzip } from 'zlib';
 
 const meter = new Meter();
-const stream = createReadStream(`./data/data-${process.env.DATA}.ndjson`).
+const stream = createReadStream(`./data/data-${process.env.DATA}.ndjson.gz`).
     pipe(createGunzip());
 
 setInterval(() => process.send({ rate: meter.toJSON() }), 1000);
