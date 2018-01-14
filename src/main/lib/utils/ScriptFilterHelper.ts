@@ -1,7 +1,7 @@
 import { isEmpty } from 'lodash';
-import { VM, VMScript } from 'vm2';
+import { createContext, runInContext } from 'vm';
 
-const vm = new VM();
+const context = createContext();
 
 export class ScriptFilterHelper {
 
@@ -13,7 +13,7 @@ export class ScriptFilterHelper {
     constructor(keys: string[], expression?: string) {
         if (expression) {
             this.filter = this.isBooleanExpression(expression) ?
-                vm.run(`(args) => ${expression}`) :
+                runInContext(`(args) => ${expression}`, context) :
                 null;
             this.keys = keys;
         }

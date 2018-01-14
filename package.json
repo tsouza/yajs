@@ -1,6 +1,6 @@
 {
   "name": "yajson-stream",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Yet Another JSON Streaming Tool",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
@@ -32,8 +32,7 @@
     "antlr4ts": "^0.4.1-alpha.0",
     "lodash": "^4.17.4",
     "stream-json": "^0.5.2",
-    "ts-iterable": "^1.0.1",
-    "vm2": "^3.5.2"
+    "ts-iterable": "^1.0.1"
   },
   "devDependencies": {
     "@types/bluebird": "^3.5.19",
