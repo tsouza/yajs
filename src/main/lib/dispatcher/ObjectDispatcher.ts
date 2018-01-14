@@ -2,7 +2,7 @@ import { isEmpty, pick } from 'lodash';
 import { ScriptFilterHelper } from '../utils/ScriptFilterHelper';
 import { AbstractObjectBuilder } from './AbstractObjectBuilder';
 
-export class JsonDispatcher extends AbstractObjectBuilder {
+export class ObjectDispatcher extends AbstractObjectBuilder {
 
     private listener?: (value?: any) => void;
 

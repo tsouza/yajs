@@ -1,5 +1,5 @@
 import { isEmpty } from 'lodash';
-import { JsonDispatcher } from '../dispatcher/ObjectDispatcher';
+import { ObjectDispatcher } from '../dispatcher/ObjectDispatcher';
 import { PathOperator } from '../path/PathOperator';
 import { YAJSPath } from '../path/YAJSPath';
 import { StreamPosition } from './StreamPosition';
@@ -10,7 +10,7 @@ export class StreamContext {
     private path: YAJSPath;
     private listener: (value?: any) => void;
 
-    private dispatchers: JsonDispatcher[] = [];
+    private dispatchers: ObjectDispatcher[] = [];
 
     private stackIndex = 0;
 
@@ -121,7 +121,7 @@ export class StreamContext {
                 if (value !== undefined) {
                     this.listener(value);
                 } else {
-                    this.dispatchers.push(new JsonDispatcher(this.listener,
+                    this.dispatchers.push(new ObjectDispatcher(this.listener,
                         this.path.projectExpression,
                         this.path.projectKeys));
                 }
@@ -134,7 +134,7 @@ export class StreamContext {
             this.position.isInRoot();
     }
 
-    private dispatch(visitor: (dispatcher: JsonDispatcher) => boolean): void {
+    private dispatch(visitor: (dispatcher: ObjectDispatcher) => boolean): void {
         this.dispatchers = this.dispatchers.filter((d) => !visitor(d));
     }
 }

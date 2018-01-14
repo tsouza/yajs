@@ -88,8 +88,8 @@ export abstract class AbstractObjectBuilder {
     }
 
     clear(): void {
-        this.fieldName = undefined;
-        this.stack = [];
+        /*this.fieldName = undefined;
+        this.stack = [];*/
     }
 
     protected peek(): JsonNode {
