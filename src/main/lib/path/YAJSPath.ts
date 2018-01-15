@@ -90,7 +90,7 @@ export class YAJSPath extends Iterable<PathOperator> {
     path(): string[] {
         const result = [];
         const ops = this.operators.slice(0, this.size);
-        for (let i = result.length; i >= 0; i--) {
+        for (let i = 0, len = ops.length; i < len; i++) {
             const op = this.operators[i];
             if (op.getType() === PathOperator.Type.OBJECT && (op as ChildNode).key) {
                 result.push((op as ChildNode).key);
