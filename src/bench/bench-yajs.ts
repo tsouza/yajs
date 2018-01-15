@@ -1,11 +1,11 @@
-
 import { createReadStream } from 'fs';
 import { Meter } from 'measured';
 import { createGunzip } from 'zlib';
 import yajs from '../main/yajs';
 
+const TYPE = process.env.TYPE || 'ndjson';
 const meter = new Meter();
-const stream = createReadStream(`./data/data-${process.env.DATA}.ndjson.gz`).
+const stream = createReadStream(`./data/data-${process.env.DATA}.${TYPE}.gz`).
     pipe(createGunzip());
 
 if (process.send) {
@@ -16,6 +16,5 @@ if (process.send) {
 
 stream.pipe(yajs(process.env.JSON_PATH)).
     on('data', (d) => meter.mark()).
-    // tslint:disable-next-line:no-console
     on('error', (err) => console.error(err.stack)).
-    on('end', () => process.send && process.send({ end: true }));
+    on('end', () => process.send && process.send({ end: true, rate: meter.toJSON() }));
