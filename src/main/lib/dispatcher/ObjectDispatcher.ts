@@ -44,9 +44,4 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
         }
         return false;
     }
-
-    clear(): void {
-        super.clear();
-        this.listener = undefined;
-    }
 }

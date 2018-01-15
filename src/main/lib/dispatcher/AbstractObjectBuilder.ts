@@ -1,8 +1,6 @@
-const Scope = {
-    IN_ARRAY: 2,
-    IN_OBJECT: 1,
-    ROOT: 0,
-};
+const S_ROOT    = 0;
+const S_ARRAY   = 1;
+const S_OBJECT  = 2;
 
 export abstract class AbstractObjectBuilder {
 
@@ -11,112 +9,34 @@ export abstract class AbstractObjectBuilder {
 
     private fieldName?: string;
 
-    // private handlers: { [index: number]: (value: any, top: JsonNode) => void };
-
     constructor() {
-        /*this.handlers = {
-            [Scope.ROOT]: (value) => this.replaceTop(value),
-            [Scope.IN_OBJECT]: (value, top) => {
-                if (this.fieldName) {
-                    top.value[this.fieldName] = value;
-                    this.fieldName = undefined;
-                }
-            },
-            [Scope.IN_ARRAY]: (value, top) =>
-                (top.value as any[]).push(value),
-        };*/
-        this.push(Scope.ROOT);
+        this.push(S_ROOT);
     }
 
     startObject(): void {
-        const newObject: any = { };
-        const top = this.peek();
-        this.handle(newObject, top);
-        // this.handlers[top.scope.valueOf()](newObject, top);
-        /*switch (top.scope) {
-            case Scope.ROOT:
-                this.replaceTop(newObject);
-                break;
-            case Scope.IN_OBJECT:
-                if (this.fieldName) {
-                    top.value[this.fieldName] = newObject;
-                    this.fieldName = undefined;
-                }
-                break;
-            case Scope.IN_ARRAY:
-                (top.value as any[]).push(newObject);
-                break;
-            default:
-                throw new Error();
-        }*/
-        this.push(Scope.IN_OBJECT, newObject);
+        const newObject = {};
+        this.handle(newObject);
+        this.push(S_OBJECT, newObject);
     }
 
    startObjectEntry(key: string): void {
-       if (this.peek().scope === Scope.IN_OBJECT) {
+       if (this.peek().scope === S_OBJECT) {
            this.fieldName = key;
        }
-        /*switch (this.peek().scope) {
-            case Scope.IN_OBJECT:
-                this.fieldName = key;
-                break;
-            case Scope.IN_ARRAY:
-                throw new Error();
-        }*/
     }
 
     startArray(): void {
-        const newArray: any[] = [];
-        const top = this.peek();
-        this.handle(newArray, top);
-        // this.handlers[top.scope.valueOf()](newArray, top);
-        /*switch (top.scope) {
-            case Scope.ROOT:
-                this.replaceTop(newArray);
-                break;
-            case Scope.IN_OBJECT:
-                if (this.fieldName) {
-                    top.value[this.fieldName] = newArray;
-                    this.fieldName = undefined;
-                }
-                break;
-            case Scope.IN_ARRAY:
-                (top.value as any[]).push(newArray);
-                break;
-            default:
-                throw new Error();
-        }*/
-        this.push(Scope.IN_ARRAY, newArray);
+        const newArray = [];
+        this.handle(newArray);
+        this.push(S_ARRAY, newArray);
     }
 
     onValue(value: any): void {
-        this.handle(value, this.peek());
-        // this.handlers[top.scope.valueOf()](value, top);
-        /*switch (top.scope) {
-            case Scope.ROOT:
-                this.replaceTop(value);
-                break;
-            case Scope.IN_OBJECT:
-                if (this.fieldName) {
-                    top.value[this.fieldName] = value;
-                    this.fieldName = undefined;
-                }
-                break;
-            case Scope.IN_ARRAY:
-                (top.value as any[]).push(value);
-                break;
-            default:
-                throw new Error();
-        }*/
+        this.handle(value);
     }
 
     isInRoot(): boolean {
-        return this.peek().scope === Scope.ROOT;
-    }
-
-    clear(): void {
-        /*this.fieldName = undefined;
-        this.stack = [];*/
+        return this.peek().scope === S_ROOT;
     }
 
     protected peek(): JsonNode {
@@ -125,7 +45,7 @@ export abstract class AbstractObjectBuilder {
 
     protected doEndObject(): void {
         const scope = this.peek().scope;
-        if (scope === Scope.IN_OBJECT) {
+        if (scope === S_OBJECT) {
             this.pop();
         }
     }
@@ -151,20 +71,26 @@ export abstract class AbstractObjectBuilder {
         }
         next.value = value;
         next.scope = scope;
-        // next.handler = this.handlers[scope];
         this.stackSize++;
     }
 
-    private handle(value: any, top: JsonNode): void {
-        if (top.scope === Scope.ROOT) {
-            this.replaceTop(value);
-        } else if (top.scope === Scope.IN_OBJECT) {
-            if (this.fieldName) {
-                top.value[this.fieldName] = value;
-                this.fieldName = undefined;
-            }
-        } else if (top.scope === Scope.IN_ARRAY) {
-            (top.value as any[]).push(value);
+    private handle(value: any): void {
+        const top = this.peek();
+        const topScope = top.scope;
+        const topValue = top.value;
+        switch (topScope) {
+            case S_ROOT:
+                this.replaceTop(value);
+                break;
+            case S_OBJECT:
+                const fieldName = this.fieldName;
+                if (fieldName) {
+                    topValue[fieldName] = value;
+                    this.fieldName = undefined;
+                }
+                break;
+            case S_ARRAY:
+                (topValue as any[]).push(value);
         }
     }
  }
@@ -172,6 +98,5 @@ export abstract class AbstractObjectBuilder {
 // tslint:disable-next-line:max-classes-per-file
 class JsonNode {
     scope: number;
-    // handler: (value: any, top: JsonNode) => void;
     value?: any;
 }

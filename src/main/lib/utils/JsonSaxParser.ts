@@ -1,5 +1,5 @@
 // Named constants with unique integer values
-const C = {};
+const C: any = {};
 // Tokenizer States
 const START   = C.START   = 0x11;
 const TRUE1   = C.TRUE1   = 0x21;
