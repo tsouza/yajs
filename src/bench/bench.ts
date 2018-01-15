@@ -5,6 +5,7 @@ import { Stats } from 'fast-stats';
 const tableDataset1 = createTable(1);
 const tableDataset2 = createTable(2);
 const tableDataset3 = createTable(3);
+const tableDataset4 = createTable(4);
 
 benchmark('yajs', 1, '$.field2.nested', tableDataset1).
 then(() => benchmark('jsonstream', 1, 'field2.nested.*', tableDataset1)).
@@ -19,7 +20,11 @@ then(() => console.log(tableDataset2.toString())).
 then(() => benchmark('yajs', 3, '$..plugins', tableDataset3, 'json')).
 then(() => benchmark('jsonstream', 3, '*._source..plugins.*', tableDataset3, 'json')).
 then(() => benchmark('oboe', 3, '![*]._source..plugins[*]', tableDataset3, 'json')).
-then(() => console.log(tableDataset3.toString()));
+then(() => console.log(tableDataset3.toString())).
+
+then(() => benchmark('yajs', 4, '$..array', tableDataset4, 'json')).
+then(() => benchmark('jsonstream', 4, '*..array.*', tableDataset4, 'json')).
+then(() => console.log(tableDataset4.toString()));
 
 function benchmark(bench: string, dataset: number, path: string,
                    table: object, type: string = 'ndjson'): Promise<void> {
