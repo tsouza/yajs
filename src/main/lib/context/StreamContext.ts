@@ -125,10 +125,11 @@ export class StreamContext {
         if (this.dispatcher && visitor(this.dispatcher)) {
             this.dispatcher = null;
         } else {
-            for (let i = this.dispatchers.length - 1; i >= 0; i--) {
-                const d = this.dispatchers[i];
+            const dispatchers = this.dispatchers;
+            for (let i = dispatchers.length - 1; i >= 0; i--) {
+                const d = dispatchers[i];
                 if (visitor(d)) {
-                    this.dispatchers.splice(i);
+                    dispatchers.splice(i);
                 }
             }
         }
