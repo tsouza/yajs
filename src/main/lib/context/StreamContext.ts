@@ -10,6 +10,7 @@ export class StreamContext {
     private path: YAJSPath;
     private listener: (value?: any) => void;
 
+    private dispatchers: ObjectDispatcher[] = [];
     private dispatcher: ObjectDispatcher;
 
     private pathArray: string[];
@@ -95,12 +96,19 @@ export class StreamContext {
                 if (value !== undefined) {
                     this.listener(value);
                 } else {
-                    this.dispatcher = new ObjectDispatcher(this.listener,
+                    const dispatcher = new ObjectDispatcher(this.listener,
                         this.path.projectExpression,
                         this.path.projectKeys);
-                    /*this.dispatchers.push(new ObjectDispatcher(this.listener,
-                        this.path.projectExpression,
-                        this.path.projectKeys));*/
+
+                    if (this.dispatchers.length) {
+                        this.dispatchers.push(dispatcher);
+                    } else if (this.dispatcher) {
+                        this.dispatchers.push(this.dispatcher);
+                        this.dispatchers.push(dispatcher);
+                        this.dispatcher = null;
+                    } else {
+                        this.dispatcher = dispatcher;
+                    }
                 }
                 return true;
             }
@@ -116,6 +124,13 @@ export class StreamContext {
     private dispatch(visitor: (dispatcher: ObjectDispatcher) => boolean): void {
         if (this.dispatcher && visitor(this.dispatcher)) {
             this.dispatcher = null;
+        } else {
+            for (let i = this.dispatchers.length - 1; i >= 0; i--) {
+                const d = this.dispatchers[i];
+                if (visitor(d)) {
+                    this.dispatchers.splice(i);
+                }
+            }
         }
     }
 

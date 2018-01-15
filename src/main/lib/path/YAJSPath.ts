@@ -89,12 +89,13 @@ export class YAJSPath extends Iterable<PathOperator> {
 
     path(): string[] {
         const result = [];
-        this.operators.slice(0, this.size).
-            forEach((op) => {
-                if (op instanceof ChildNode && (op as ChildNode).key) {
-                    result.push(op.key);
-                }
-            });
+        const ops = this.operators.slice(0, this.size);
+        for (let i = result.length; i >= 0; i--) {
+            const op = this.operators[i];
+            if (op.getType() === PathOperator.Type.OBJECT && (op as ChildNode).key) {
+                result.push((op as ChildNode).key);
+            }
+        }
         return result;
     }
 

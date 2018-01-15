@@ -66,6 +66,15 @@ describe('yajs', () => {
                         path: ['nested1', 'nested2', 'nested3'],
                         value: { prop1: 'value1', prop2: 'value2' }}));
                 }));
+
+    it('should access with wildcard and projection', () =>
+        test('simple', '$..*{path4}').
+            then((array) => {
+                expect(array).to.be.lengthOf(3);
+                array.forEach((entry) => expect(entry).to.be.deep.equal({
+                    path: ['nested1', 'nested2', 'nested3'],
+                    value: { prop1: 'value1', prop2: 'value2' }}));
+            }));
 });
 
 function test(json: string, path: string): Promise<any[]> {
