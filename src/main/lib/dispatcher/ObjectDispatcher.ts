@@ -27,7 +27,7 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
                     this.listener(result);
                 }
             }
-            this.clear();
+            // this.clear();
             return true;
         }
         return false;
@@ -38,8 +38,8 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
         if (this.isInRoot()) {
             /*let result: any = this.peek().value;
             if (this.listener)
-                this.listener(result);*/
-            this.clear();
+                this.listener(result);
+            this.clear();*/
             return true;
         }
         return false;

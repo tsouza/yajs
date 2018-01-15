@@ -10,9 +10,7 @@ export class StreamContext {
     private path: YAJSPath;
     private listener: (value?: any) => void;
 
-    private dispatchers: ObjectDispatcher[] = [];
-
-    private stackIndex = 0;
+    private dispatcher: ObjectDispatcher;
 
     constructor(path: YAJSPath, listener: (path: string[], value?: any) => void) {
         this.path = path;
@@ -29,17 +27,9 @@ export class StreamContext {
         if (this.isInRoot()) {
             this.reset();
         }
-        this.stackIndex++;
         const currentNode = this.position.peek();
-        switch (currentNode.getType()) {
-            case PathOperator.Type.OBJECT:
-            case PathOperator.Type.ARRAY:
-                this.match();
-                break;
-            case PathOperator.Type.ROOT:
-                break;
-            default:
-                throw new Error();
+        if (currentNode.getType() !== PathOperator.Type.ROOT) {
+            this.match();
         }
         this.position.stepIntoObject();
         this.dispatch((dispatcher) => {
@@ -49,7 +39,6 @@ export class StreamContext {
     }
 
     endObject(): void {
-        this.stackIndex--;
         this.position.stepOutObject();
         this.dispatch((dispatcher) => dispatcher.endObject());
     }
@@ -66,20 +55,6 @@ export class StreamContext {
        if (this.isInRoot()) {
             this.reset();
        }
-        /*this.stackIndex++;
-        let currentNode = this.position.peek();
-        switch (currentNode.getType()) {
-            case PathOperator.Type.OBJECT:
-            case PathOperator.Type.ARRAY:
-                this.match();
-                break;
-            case PathOperator.Type.ROOT:
-                break;
-            default:
-                throw new Error();
-        }
-        let arrayIndex = this.position.pathDepth();
-        //this.workingPath.insertAt(arrayIndex, new ArrayIndex());*/
        this.position.stepIntoArray();
        this.dispatch((dispatcher) => {
             dispatcher.startArray();
@@ -88,24 +63,15 @@ export class StreamContext {
     }
 
     endArray(): void {
-        // this.stackIndex--;
         this.position.stepOutArray();
-        // this.workingPath.pop();
         this.dispatch((dispatcher) => dispatcher.endArray());
     }
 
     onValue(value: any): void {
         if (isEmpty(this.path.projectExpression)) {
             const currentNode = this.position.peek();
-            switch (currentNode.getType()) {
-                case PathOperator.Type.OBJECT:
-                case PathOperator.Type.ARRAY:
-                    this.match(value);
-                    break;
-                case PathOperator.Type.ROOT:
-                    break;
-                default:
-                    throw new Error();
+            if (currentNode.getType() !== PathOperator.Type.ROOT) {
+                this.match(value);
             }
         }
         this.dispatch((dispatcher) => {
@@ -121,9 +87,12 @@ export class StreamContext {
                 if (value !== undefined) {
                     this.listener(value);
                 } else {
-                    this.dispatchers.push(new ObjectDispatcher(this.listener,
+                    this.dispatcher = new ObjectDispatcher(this.listener,
                         this.path.projectExpression,
-                        this.path.projectKeys));
+                        this.path.projectKeys);
+                    /*this.dispatchers.push(new ObjectDispatcher(this.listener,
+                        this.path.projectExpression,
+                        this.path.projectKeys));*/
                 }
             }
         }
@@ -135,6 +104,8 @@ export class StreamContext {
     }
 
     private dispatch(visitor: (dispatcher: ObjectDispatcher) => boolean): void {
-        this.dispatchers = this.dispatchers.filter((d) => !visitor(d));
+        if (this.dispatcher && visitor(this.dispatcher)) {
+            this.dispatcher = null;
+        }
     }
 }

@@ -97,12 +97,9 @@ export abstract class AbstractObjectBuilder {
     }
 
     protected doEndObject(): void {
-        switch (this.peek().scope) {
-            case Scope.IN_OBJECT:
-                this.pop();
-                break;
-            case Scope.IN_ARRAY:
-                throw new Error();
+        const scope = this.peek().scope;
+        if (scope === Scope.IN_OBJECT) {
+            this.pop();
         }
     }
 
