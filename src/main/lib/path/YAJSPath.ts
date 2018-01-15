@@ -88,13 +88,14 @@ export class YAJSPath extends Iterable<PathOperator> {
     }
 
     path(): string[] {
-        return this.operators.
-            slice(0, this.size).
-            map((op) =>
-                op instanceof ChildNode &&
-                (op as ChildNode).key).
-            filter((key) => key) as string[];
-
+        const result = [];
+        this.operators.slice(0, this.size).
+            forEach((op) => {
+                if (op instanceof ChildNode && (op as ChildNode).key) {
+                    result.push(op.key);
+                }
+            });
+        return result;
     }
 
     get definite(): boolean {

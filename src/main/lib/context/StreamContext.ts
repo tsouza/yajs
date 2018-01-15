@@ -12,6 +12,9 @@ export class StreamContext {
 
     private dispatcher: ObjectDispatcher;
 
+    private pathArray: string[];
+    private currentKey: string;
+
     constructor(path: YAJSPath, listener: (path: string[], value?: any) => void) {
         this.path = path;
         this.listener = (value?: any) =>
@@ -20,6 +23,7 @@ export class StreamContext {
 
     reset(): void {
         this.position = new StreamPosition();
+        this.pathArray = [];
         this.match();
     }
 
@@ -29,7 +33,9 @@ export class StreamContext {
         }
         const currentNode = this.position.peek();
         if (currentNode.getType() !== PathOperator.Type.ROOT) {
-            this.match();
+            if (this.match()) {
+                this.pathArray.push(this.currentKey);
+            }
         }
         this.position.stepIntoObject();
         this.dispatch((dispatcher) => {
@@ -39,11 +45,13 @@ export class StreamContext {
     }
 
     endObject(): void {
+        // this.currentKey = this.pathArray.pop();
         this.position.stepOutObject();
         this.dispatch((dispatcher) => dispatcher.endObject());
     }
 
     startObjectEntry(key: string): void {
+        this.currentKey = key;
         this.position.updateObjectEntry(key);
         this.dispatch((dispatcher) => {
             dispatcher.startObjectEntry(key);
@@ -80,7 +88,7 @@ export class StreamContext {
         });
     }
 
-    private match(value?: any): void {
+    private match(value?: any): boolean {
         const currentDepth = this.position.pathDepth();
         if (this.path.definite || this.path.minimumDepth <= currentDepth) {
             if (this.path.match(this.position)) {
@@ -94,8 +102,10 @@ export class StreamContext {
                         this.path.projectExpression,
                         this.path.projectKeys));*/
                 }
+                return true;
             }
         }
+        return false;
     }
 
     private isInRoot(): boolean {
@@ -107,5 +117,9 @@ export class StreamContext {
         if (this.dispatcher && visitor(this.dispatcher)) {
             this.dispatcher = null;
         }
+    }
+
+    private currentPathArray(): string[] {
+        return this.pathArray;
     }
 }

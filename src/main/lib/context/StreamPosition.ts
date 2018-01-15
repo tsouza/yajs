@@ -5,6 +5,9 @@ import { YAJSPath } from '../path/YAJSPath';
 
 export class StreamPosition extends YAJSPath {
 
+    private rootIndex = 0;
+    private hasOnlyArrayIndex = true;
+
     stepIntoObject() {
         if (this.operators.length > this.size) {
             const next = this.operators[this.size];
@@ -51,8 +54,24 @@ export class StreamPosition extends YAJSPath {
     }
 
     isInRoot(): boolean {
-        return this.peek().getType() === PathOperator.Type.ROOT ||
-            !this.operators.slice(1, this.pathDepth()).
-                some((op) => op.getType() !== PathOperator.Type.ARRAY);
+        return this.hasOnlyArrayIndex ||
+            this.peek().getType() === PathOperator.Type.ROOT;
+    }
+
+    protected push(operator: PathOperator): void {
+        if (operator.getType() !== PathOperator.Type.ARRAY) {
+            this.hasOnlyArrayIndex = false;
+        } else if (this.hasOnlyArrayIndex) {
+            this.rootIndex = this.pathDepth();
+        }
+        super.push(operator);
+    }
+
+    protected pop(): void {
+        super.pop();
+        if (this.pathDepth() <= this.rootIndex) {
+            this.hasOnlyArrayIndex = true;
+            this.rootIndex = this.pathDepth();
+        }
     }
 }

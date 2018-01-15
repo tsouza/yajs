@@ -1,3 +1,9 @@
+const Scope = {
+    IN_ARRAY: 2,
+    IN_OBJECT: 1,
+    ROOT: 0,
+};
+
 export abstract class AbstractObjectBuilder {
 
     private stack: JsonNode[];
@@ -5,14 +11,29 @@ export abstract class AbstractObjectBuilder {
 
     private fieldName?: string;
 
+    // private handlers: { [index: number]: (value: any, top: JsonNode) => void };
+
     constructor() {
-      this.push(Scope.ROOT);
+        /*this.handlers = {
+            [Scope.ROOT]: (value) => this.replaceTop(value),
+            [Scope.IN_OBJECT]: (value, top) => {
+                if (this.fieldName) {
+                    top.value[this.fieldName] = value;
+                    this.fieldName = undefined;
+                }
+            },
+            [Scope.IN_ARRAY]: (value, top) =>
+                (top.value as any[]).push(value),
+        };*/
+        this.push(Scope.ROOT);
     }
 
     startObject(): void {
         const newObject: any = { };
         const top = this.peek();
-        switch (top.scope) {
+        this.handle(newObject, top);
+        // this.handlers[top.scope.valueOf()](newObject, top);
+        /*switch (top.scope) {
             case Scope.ROOT:
                 this.replaceTop(newObject);
                 break;
@@ -27,24 +48,29 @@ export abstract class AbstractObjectBuilder {
                 break;
             default:
                 throw new Error();
-        }
+        }*/
         this.push(Scope.IN_OBJECT, newObject);
     }
 
    startObjectEntry(key: string): void {
-        switch (this.peek().scope) {
+       if (this.peek().scope === Scope.IN_OBJECT) {
+           this.fieldName = key;
+       }
+        /*switch (this.peek().scope) {
             case Scope.IN_OBJECT:
                 this.fieldName = key;
                 break;
             case Scope.IN_ARRAY:
                 throw new Error();
-        }
+        }*/
     }
 
     startArray(): void {
         const newArray: any[] = [];
         const top = this.peek();
-        switch (top.scope) {
+        this.handle(newArray, top);
+        // this.handlers[top.scope.valueOf()](newArray, top);
+        /*switch (top.scope) {
             case Scope.ROOT:
                 this.replaceTop(newArray);
                 break;
@@ -59,13 +85,14 @@ export abstract class AbstractObjectBuilder {
                 break;
             default:
                 throw new Error();
-        }
+        }*/
         this.push(Scope.IN_ARRAY, newArray);
     }
 
     onValue(value: any): void {
-        const top = this.peek();
-        switch (top.scope) {
+        this.handle(value, this.peek());
+        // this.handlers[top.scope.valueOf()](value, top);
+        /*switch (top.scope) {
             case Scope.ROOT:
                 this.replaceTop(value);
                 break;
@@ -80,7 +107,7 @@ export abstract class AbstractObjectBuilder {
                 break;
             default:
                 throw new Error();
-        }
+        }*/
     }
 
     isInRoot(): boolean {
@@ -115,7 +142,7 @@ export abstract class AbstractObjectBuilder {
         this.stackSize--;
     }
 
-    private push(scope: Scope, value?: any): void {
+    private push(scope: number, value?: any): void {
         this.stack = this.stack || [];
         let next = this.stack[this.stackSize];
         if (next == null) {
@@ -124,18 +151,27 @@ export abstract class AbstractObjectBuilder {
         }
         next.value = value;
         next.scope = scope;
+        // next.handler = this.handlers[scope];
         this.stackSize++;
     }
-}
+
+    private handle(value: any, top: JsonNode): void {
+        if (top.scope === Scope.ROOT) {
+            this.replaceTop(value);
+        } else if (top.scope === Scope.IN_OBJECT) {
+            if (this.fieldName) {
+                top.value[this.fieldName] = value;
+                this.fieldName = undefined;
+            }
+        } else if (top.scope === Scope.IN_ARRAY) {
+            (top.value as any[]).push(value);
+        }
+    }
+ }
 
 // tslint:disable-next-line:max-classes-per-file
 class JsonNode {
-    scope: Scope;
+    scope: number;
+    // handler: (value: any, top: JsonNode) => void;
     value?: any;
-}
-
-enum Scope {
-    ROOT,
-    IN_OBJECT,
-    IN_ARRAY,
 }
