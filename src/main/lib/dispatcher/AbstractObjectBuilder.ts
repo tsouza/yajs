@@ -1,7 +1,3 @@
-const S_ROOT    = 0;
-const S_ARRAY   = 1;
-const S_OBJECT  = 2;
-
 export abstract class AbstractObjectBuilder {
 
     fieldName?: string;
@@ -35,7 +31,7 @@ export abstract class AbstractObjectBuilder {
     }
 
     isInRoot(): boolean {
-        return this.peek().scope === S_ROOT;
+        return this.peek().root;
     }
 
     peek(): IJsonNode {
@@ -43,10 +39,7 @@ export abstract class AbstractObjectBuilder {
     }
 
     protected doEndObject(): void {
-        const scope = this.peek().scope;
-        if (scope === S_OBJECT) {
-            this.pop();
-        }
+        this.pop();
     }
 
     protected doEndArray(): void {
@@ -63,8 +56,9 @@ export abstract class AbstractObjectBuilder {
  }
 
 interface IJsonNode {
-     scope: number;
+
      value?: any;
+     root: boolean;
 
      handle(value: any, builder: AbstractObjectBuilder): void;
 }
@@ -72,7 +66,7 @@ interface IJsonNode {
 // tslint:disable-next-line:max-classes-per-file
 class RootNode implements IJsonNode {
 
-    readonly scope = S_ROOT;
+    root = true;
     value?: any;
 
     handle(value: any, builder: AbstractObjectBuilder): void {
@@ -83,7 +77,7 @@ class RootNode implements IJsonNode {
 // tslint:disable-next-line:max-classes-per-file
 class ObjectNode implements IJsonNode {
 
-    readonly scope = S_OBJECT;
+    root = false;
     value?: any;
 
     constructor(value: object) {
@@ -102,7 +96,7 @@ class ObjectNode implements IJsonNode {
 // tslint:disable-next-line:max-classes-per-file
 class ArrayNode implements IJsonNode {
 
-    readonly scope = S_ARRAY;
+    root = false;
     value?: any;
 
     constructor(value: any[]) {
