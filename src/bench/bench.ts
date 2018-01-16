@@ -22,8 +22,9 @@ then(() => benchmark('jsonstream', 3, '*._source..plugins.*', tableDataset3, 'js
 then(() => benchmark('oboe', 3, '![*]._source..plugins[*]', tableDataset3, 'json')).
 then(() => console.log(tableDataset3.toString())).
 
-then(() => benchmark('yajs', 4, '$..array', tableDataset4, 'json')).
-then(() => benchmark('jsonstream', 4, '*..array.*', tableDataset4, 'json')).
+then(() => benchmark('yajs', 4, '$..array.deep1', tableDataset4, 'json')).
+then(() => benchmark('jsonstream', 4, '*..array.*.deep1', tableDataset4, 'json')).
+then(() => benchmark('oboe', 4, '!..array[*].deep1', tableDataset4, 'json')).
 then(() => console.log(tableDataset4.toString()));
 
 function benchmark(bench: string, dataset: number, path: string,
