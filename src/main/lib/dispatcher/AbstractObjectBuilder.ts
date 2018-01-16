@@ -4,42 +4,41 @@ const S_OBJECT  = 2;
 
 export abstract class AbstractObjectBuilder {
 
-    private stack: JsonNode[];
+    fieldName?: string;
+
+    private stack: IJsonNode[];
     private stackSize: number = 0;
 
-    private fieldName?: string;
-
     constructor() {
-        this.push(S_ROOT);
+        this.stack = [];
+        this.push(new RootNode());
     }
 
     startObject(): void {
         const newObject = {};
-        this.handle(newObject);
-        this.push(S_OBJECT, newObject);
+        this.peek().handle(newObject, this);
+        this.push(new ObjectNode(newObject));
     }
 
    startObjectEntry(key: string): void {
-       if (this.peek().scope === S_OBJECT) {
-           this.fieldName = key;
-       }
+        this.fieldName = key;
     }
 
     startArray(): void {
         const newArray = [];
-        this.handle(newArray);
-        this.push(S_ARRAY, newArray);
+        this.peek().handle(newArray, this);
+        this.push(new ArrayNode(newArray));
     }
 
     onValue(value: any): void {
-        this.handle(value);
+        this.peek().handle(value, this);
     }
 
     isInRoot(): boolean {
         return this.peek().scope === S_ROOT;
     }
 
-    protected peek(): JsonNode {
+    peek(): IJsonNode {
         return this.stack[this.stackSize - 1];
     }
 
@@ -54,49 +53,63 @@ export abstract class AbstractObjectBuilder {
         this.pop();
     }
 
-    private replaceTop(value?: any): void {
-        this.stack[this.stackSize - 1].value = value;
-    }
-
     private pop(): void {
         this.stackSize--;
     }
 
-    private push(scope: number, value?: any): void {
-        this.stack = this.stack || [];
-        let next = this.stack[this.stackSize];
-        if (next == null) {
-            next = new JsonNode();
-            this.stack[this.stackSize] = next;
-        }
-        next.value = value;
-        next.scope = scope;
-        this.stackSize++;
-    }
-
-    private handle(value: any): void {
-        const top = this.peek();
-        const topScope = top.scope;
-        const topValue = top.value;
-        switch (topScope) {
-            case S_ROOT:
-                this.replaceTop(value);
-                break;
-            case S_OBJECT:
-                const fieldName = this.fieldName;
-                if (fieldName) {
-                    topValue[fieldName] = value;
-                    this.fieldName = undefined;
-                }
-                break;
-            case S_ARRAY:
-                (topValue as any[]).push(value);
-        }
+    private push(node: IJsonNode): void {
+        this.stack[this.stackSize++] = node;
     }
  }
 
+interface IJsonNode {
+     scope: number;
+     value?: any;
+
+     handle(value: any, builder: AbstractObjectBuilder): void;
+}
+
 // tslint:disable-next-line:max-classes-per-file
-class JsonNode {
-    scope: number;
+class RootNode implements IJsonNode {
+
+    readonly scope = S_ROOT;
     value?: any;
+
+    handle(value: any, builder: AbstractObjectBuilder): void {
+        builder.peek().value = value;
+    }
+}
+
+// tslint:disable-next-line:max-classes-per-file
+class ObjectNode implements IJsonNode {
+
+    readonly scope = S_OBJECT;
+    value?: any;
+
+    constructor(value: object) {
+        this.value = value;
+    }
+
+    handle(value: any, builder: AbstractObjectBuilder): void {
+        const fieldName = builder.fieldName;
+        if (fieldName) {
+            this.value[fieldName] = value;
+            builder.fieldName = undefined;
+        }
+    }
+}
+
+// tslint:disable-next-line:max-classes-per-file
+class ArrayNode implements IJsonNode {
+
+    readonly scope = S_ARRAY;
+    value?: any;
+
+    constructor(value: any[]) {
+        this.value = value;
+    }
+
+    handle(value: any, builder: AbstractObjectBuilder): void {
+        (this.value as any[]).push(value);
+    }
 }
