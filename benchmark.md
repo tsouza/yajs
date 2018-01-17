@@ -12,20 +12,22 @@ See [bench](src/bench) for more details
 
 ## Datasets
 
-Dataset   | Format | Size  | Object size | Objects | Root Type
-----------|--------|-------|-------------|---------|----------
-Dataset 1 | ndjson | 76MB  | 80B         | 1M      | object
-Dataset 2 | ndjson | 10GB  | 5.3KB       | 2M      | object
-Dataset 3 | json   | 15GB  | 5.3KB       | 3M      | array
-Dataset 4 | json   | 5.2GB | 5.2GB       | 1       | object
+Dataset | Format | Size  | Object size | Objects | Root Type
+:------:|--------|-------|-------------|---------|----------
+1       | ndjson | 76MB  | 80B         | 1M      | object
+2       | ndjson | 10GB  | 5.3KB       | 2M      | object
+3       | json   | 15GB  | 5.3KB       | 3M      | array
+4       | json   | 5.2GB | 5.2GB       | 1       | object
 
 ### Selection paths
 
-Library/Dataset | Dataset 1            | Dataset 2               | Dataset 3                  | Dataset 4 
-----------------|----------------------|-------------------------|----------------------------|--------------------
-yajs            | `$.field2.nested`    | `$..plugins`            | `$..plugins`               | `$..array.deep1`
-JSONStream      | `field2.nested.*`    | `!._source..plugins[*]` | `![*]._source..plugins[*]` | `!..array[*].deep1`
-oboe.js         | `!.field2.nested[*]` | `_source..plugins.*`    | `*._source..plugins.*`     | `*..array.*.deep1`
+
+Dataset/Library   | yajs              | JSONStream             | oboe.js 
+:----------------:|-------------------|------------------------|----------------------------
+1                 | `$.field2.nested` | `field2.nested.*`      | `!.field2.nested[*]`
+2                 | `$..plugins`      | `_source..plugins.*`   | `!._source..plugins[*]`
+3                 | `$..plugins`      | `*._source..plugins.*` | `![*]._source..plugins[*]`
+4                 | `$..array.deep1`  | `*..array.*.deep1`     | `!..array[*].deep1`
 
 ## Software Configuration
 
