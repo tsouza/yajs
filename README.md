@@ -109,8 +109,8 @@ For bugs, questions and discussions please use the [Github Issues](issues).
 
 ## Acknowledgements
 
-Thanks to [wanglingsong](https://github.com/wanglingsong) for his awesome work with [JsonSurfer](https://github.com/jsurfer/JsonSurfer) which inspired me to create YAJS.
-Thanks to [creationix](https://github.com/creationix/jsonparse) for his crazy fast [sax-based json parser](https://gist.github.com/creationix/1821394).
+* Thanks to [wanglingsong](https://github.com/wanglingsong) for his awesome work with [JsonSurfer](https://github.com/jsurfer/JsonSurfer) which inspired me to create YAJS.
+* Thanks to [creationix](https://github.com/creationix/jsonparse) for his crazy fast [sax-based json parser](https://gist.github.com/creationix/1821394).
 
 ## LICENSE
 
