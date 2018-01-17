@@ -44,7 +44,7 @@ JSONStream  | 1.3.2
 Hardware | Vendor  | Description
 ---------|---------|-------------------------------------------------
 CPU      | Intel   | Intel(R) Core(TM) i3-3217U CPU @ 1.80GHz
-Memory   | Corsair | Vengance(R) 16GB (2x8GB) DDR3 1600 MT/s (CMSX16GX3M2B1600C9)
+Memory   | Corsair | Vengeance(R) 16GB (2x8GB) DDR3 1600 MT/s (CMSX16GX3M2B1600C9)
 Disk     | Samsung | 250GB SSD 850 EVO mSATA (S248NXAH204096F)
 
 ## Results
