@@ -4,6 +4,12 @@
 
 YAJS is a tool for filtering a portion of json files.
 
+## Motivation
+
+The reason I built this tool is that I could not find a proper json stream processor with the features I needed without sacrificing speed and memory. 
+
+There is a also a benchmark of this tool comparing with [oboe.js](https://github.com/jimhigson/oboe.js) and [JSONStream](https://github.com/dominictarr/JSONStream). See [benchmark](benchmark.md).
+
 ## Example
 
 Pipe a text stream of json into YAJS and select 'author' property:
@@ -34,14 +40,14 @@ $ cat package.json | yajs '$.author'
 
 YAJS selector syntax is jsonpath-like, yet it's **not** jsonpath.
 
-YAJS Selector                    | Description
----------------------------------|------------
-`$`                              | The root object/element
-`*`                              | Wildcard matching all objects/elements regardless
-`.`                              | Child member operator
-`..`                             | Recursive descendant operator
-`..[<path filter>]<key>`         | Recursive descendant operator if path filter evaluates to true (see example below)
-`<key>{keys filter}`             | Will emit only if keys filter evaluates to true. Only supported in the end of the expression (see example below)
+YAJS Selector                     | Description
+---------------------------------:|------------
+`$`                               | The root object/element
+`*`                               | Wildcard matching all objects/elements regardless
+`.`                               | Child member operator
+`..`                              | Recursive descendant operator
+`..[<path filter>]<key>`          | Recursive descendant operator if path filter evaluates to true (see example below)
+`<key>{keys filter}`              | Will emit only if keys filter evaluates to true. Only supported in the end of the expression (see example below)
 
 ### Example of `..[<filter keys>]<key>`
 
