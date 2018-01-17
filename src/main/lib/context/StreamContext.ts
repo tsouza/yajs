@@ -13,9 +13,6 @@ export class StreamContext {
     private dispatchers: ObjectDispatcher[] = [];
     private dispatcher: ObjectDispatcher;
 
-    private pathArray: string[];
-    private currentKey: string;
-
     constructor(path: YAJSPath, listener: (path: string[], value?: any) => void) {
         this.path = path;
         this.listener = (value?: any) =>
@@ -24,7 +21,6 @@ export class StreamContext {
 
     reset(): void {
         this.position = new StreamPosition();
-        this.pathArray = [];
         this.match();
     }
 
@@ -34,9 +30,7 @@ export class StreamContext {
         }
         const currentNode = this.position.peek();
         if (currentNode.getType() !== PathOperator.Type.ROOT) {
-            if (this.match()) {
-                this.pathArray.push(this.currentKey);
-            }
+            this.match();
         }
         this.position.stepIntoObject();
         this.dispatch((dispatcher) => {
@@ -52,7 +46,6 @@ export class StreamContext {
     }
 
     startObjectEntry(key: string): void {
-        this.currentKey = key;
         this.position.updateObjectEntry(key);
         this.dispatch((dispatcher) => {
             dispatcher.startObjectEntry(key);
@@ -133,9 +126,5 @@ export class StreamContext {
                 }
             }
         }
-    }
-
-    private currentPathArray(): string[] {
-        return this.pathArray;
     }
 }
