@@ -1,6 +1,8 @@
 # YAJS: **Y**et **A**nother **J**SON **S**treaming Tool
 
-<a href="https://travis-ci.org/tsouza/yajs/builds"><img src="https://travis-ci.org/tsouza/yajs.svg?branch=master"></a>
+[![Build Status via Travis CI](https://travis-ci.org/tsouza/yajs.svg?branch=master)](https://travis-ci.org/tsouza/yajs)
+[![NPM version](https://img.shields.io/npm/v/yajson-stream.svg)](https://www.npmjs.com/package/yajson-stream)
+[![Dependency Status via David DM](https://david-dm.org/tsouza/yajs/status.svg)](https://david-dm.org/tsouza/yajs)
 
 YAJS is a tool for filtering a portion of json files.
 
