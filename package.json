@@ -1,6 +1,6 @@
 {
   "name": "yajson-stream",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "description": "Yet Another JSON Streaming Tool",
   "scripts": {
     "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
@@ -20,7 +20,8 @@
   "bugs": {
     "url": "https://github.com/tsouza/yajs/issues"
   },
-  "main": "dist/main/yajs.js",
+  "main": "dist/main/main.js",
+  "module": "dist/main/yajs.js",
   "bin": {
     "yajs": "dist/main/index.js"
   },
@@ -41,7 +42,7 @@
     "@types/chai": "^4.1.0",
     "@types/mocha": "^2.2.46",
     "JSONStream": "^1.3.2",
-    "antlr4ts-cli": "^0.4.0-canary.37504efa",
+    "antlr4ts-cli": "^0.4.0-alpha.4",
     "ascii-table": "0.0.9",
     "babel-cli": "^6.26.0",
     "babel-preset-env": "^1.6.1",
