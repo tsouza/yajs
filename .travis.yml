@@ -1,7 +1,7 @@
 language: node_js
 before_script:
   - npm install -g gulp-cli
-  - npm prepare
+  - npm run prepare
 node_js:
  - 'node'
  - '6'
