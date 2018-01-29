@@ -3,7 +3,8 @@
   "version": "1.1.10",
   "description": "Yet Another JSON Streaming Tool",
   "scripts": {
-    "test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
+    "ts-test": "node_modules/mocha/bin/_mocha --require ts-node/register 'src/test/**/*.ts'",
+    "test": "node_modules/mocha/bin/_mocha 'dist/test/**/*.js'",
     "antlr": "node_modules/.bin/antlr4ts -visitor -no-listener src/main/lib/path/parser/YAJS.g4",
     "prepare": "gulp clean && gulp compile"
   },
@@ -52,6 +53,8 @@
     "fast-stats": "0.0.3",
     "gulp": "^3.9.1",
     "gulp-babel": "^7.0.0",
+    "gulp-copy": "^1.1.0",
+    "gulp-file-copy": "0.0.1",
     "gulp-typescript": "^3.2.3",
     "measured": "^1.1.0",
     "mocha": "^4.1.0",
