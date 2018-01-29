@@ -2,6 +2,7 @@ language: node_js
 before_script:
   - npm install -g gulp-cli
   - npm run prepare
+  - gulp test-copy-data
 node_js:
  - 'node'
  - '6'
