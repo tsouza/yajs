@@ -19,7 +19,10 @@ let counter = 0;
 const max = +process.env.DATA * 1000000;
 
 oboe(stream).
-    on('node', process.env.JSON_PATH, () => meter.mark()).
+on('node', process.env.JSON_PATH, () => {
+       meter.mark();
+       return oboe.drop;
+    }).
     fail((err) => console.error(err.stack)).
     done(() => {
         if (TYPE === 'json' || ++counter >= max) {
