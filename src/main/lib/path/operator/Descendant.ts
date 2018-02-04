@@ -9,8 +9,4 @@ export class Descendant extends PathOperator {
     getType(): PathOperator.Type {
         return PathOperator.Type.DESCENDANT;
     }
-
-    toString(): string {
-        return '..';
-    }
 }

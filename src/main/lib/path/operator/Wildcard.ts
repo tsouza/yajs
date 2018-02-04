@@ -17,8 +17,4 @@ export class Wildcard extends AbstractFilteredOperator {
     getType(): PathOperator.Type {
         return PathOperator.Type.WILDCARD;
     }
-
-    toString(): string {
-        return '*';
-    }
 }

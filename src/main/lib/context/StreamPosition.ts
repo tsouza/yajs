@@ -11,7 +11,7 @@ export class StreamPosition extends YAJSPath {
     stepIntoObject() {
         if (this.operators.length > this.size) {
             const next = this.operators[this.size];
-            if (next instanceof ChildNode) {
+            if (next.getType() === PathOperator.Type.OBJECT) {
                 this.size++;
                 (next as ChildNode).key = undefined;
                 return;
@@ -31,22 +31,12 @@ export class StreamPosition extends YAJSPath {
     stepIntoArray() {
         if (this.operators.length > this.size) {
             const next = this.operators[this.size];
-            if (next instanceof ArrayIndex) {
+            if (next.getType() === PathOperator.Type.ARRAY) {
                 this.size++;
-                (next as ArrayIndex).reset();
                 return;
             }
         }
         this.push(new ArrayIndex());
-    }
-
-    accumulateArrayIndex() {
-        const top = this.peek();
-        if (top.getType() === PathOperator.Type.ARRAY) {
-            (top as ArrayIndex).arrayIndex++;
-            return true;
-        }
-        return false;
     }
 
     stepOutArray() {
@@ -69,9 +59,10 @@ export class StreamPosition extends YAJSPath {
 
     protected pop(): void {
         super.pop();
-        if (this.pathDepth() <= this.rootIndex) {
+        const pathDepth = this.pathDepth();
+        if (pathDepth <= this.rootIndex) {
             this.hasOnlyArrayIndex = true;
-            this.rootIndex = this.pathDepth();
+            this.rootIndex = pathDepth;
         }
     }
 }
