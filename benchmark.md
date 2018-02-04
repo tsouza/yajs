@@ -6,7 +6,7 @@ This is a benchmark comparing yajs with other two json streaming js libraries: [
 
 For each library, a sequence of different datasets was used to process with equivalent selection path. It was measured the total time of execution and also the rate of the objects produced per second (EPS) using [measured](https://github.com/felixge/node-measured).
 
-See [bench](src/bench) for more details 
+See [bench](src/bench) for more details
 
 *Note: Due to the large size of the datasets, they are gzipped on disk and are gunzipped on the fly before feeding the library.*
 
@@ -35,7 +35,7 @@ Software    | Version
 ------------|-----------------------------------------
 OS          | Ubuntu 17.10 (kernel 4.13.0-25-generic)
 Node.js     | v9.4.0
-yajs        | 1.1.7
+yajs        | 1.1.10
 oboe.js     | 2.1.4
 JSONStream  | 1.3.2
 
@@ -51,34 +51,34 @@ Disk     | Samsung | 250GB SSD 850 EVO mSATA (S248NXAH204096F)
 
 ### Dataset 1
 
-Library     | Completed | Total Time | Avg EPS | % Drop 
+Library     | Completed | Total Time | Avg EPS | % Drop
 ------------|:---------:|:----------:|:-------:|:-------:
-yajs        | Yes       | 21.049s    | 104.74k | -
-JSONStream  | Yes       | 27.118s    | 75.88k  | 38%
-oboe.js     | Yes       | 46.59s     | 43.66k  | 140%
+yajs        | Yes       | 21.400s    | 102.91k | -
+JSONStream  | Yes       | 27.428s    | 75.03k  | 37%
+oboe.js     | Yes       | 46.568s    | 43.68k  | 136%
 
 ### Dataset 2
 
-Library     | Completed | Total Time  | Avg EPS | % Drop 
+Library     | Completed | Total Time  | Avg EPS | % Drop
 ------------|:---------:|:-----------:|:-------:|:-------:
-yajs        | Yes       | 18m 29.662s | 9.03k   | -
-JSONStream  | Yes       | 39m 48.891s | 4.19k   | 116%
-oboe.js     | Yes       | 48m 22.562s | 3.45k   | 162%
+yajs        | Yes       | 18m 14.663s | 9.15k   | -
+JSONStream  | Yes       | 39m 32.675s | 4.22k   | 117%
+oboe.js     | Yes       | 49m 06.582s | 3.39k   | 170%
 
 ### Dataset 3
 
-Library     | Completed | Total Time     | Avg EPS | % Drop 
-------------|:---------:|:--------------:|:-------:|:-------:
-yajs        | Yes       | 0h 27m 16.705s | 9.18k   | -
-JSONStream  | Yes       | 1h 01m 13.118s | 4.08k   | 125%
-oboe.js     | No        | -              | -       | -
+Library     | Completed | Total Time  | Avg EPS | % Drop
+------------|:---------:|:-----------:|:-------:|:-------:
+yajs        | Yes       | 27m 41.419s | 9.18k   | -
+JSONStream  | Yes       | 59m 53.814s | 4.08k   | 119%
+oboe.js     | No        | -           | -       | -
 
 ### Dataset 4
 
-Library     | Completed | Total Time  | Avg EPS | % Drop 
+Library     | Completed | Total Time  | Avg EPS | % Drop
 ------------|:---------:|:-----------:|:-------:|:-------:
-yajs        | Yes       | 12m 48.436s | 365.32k | -
-JSONStream  | Yes       | 51m 49.401s | 90.07k  | 306%
+yajs        | Yes       | 12m 33.618s | 372.51k | -
+JSONStream  | Yes       | 51m 58.657s | 89.79k  | 315%
 oboe.js     | No        | -           | -       | -
 
 *Note: oboe.js did not complete due to out of memory error*
