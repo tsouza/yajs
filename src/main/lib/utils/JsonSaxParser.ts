@@ -75,10 +75,7 @@ export class JsonSaxParser {
     this.state = START;
   }
 
-  parse(buffer: (Buffer | string)) {
-    if (typeof buffer === 'string') {
-        buffer = new Buffer(buffer);
-    }
+  parse(buffer: Buffer) {
     let n;
     for (let i = 0, l = buffer.length; i < l; i++) {
       switch (this.state) {

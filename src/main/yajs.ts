@@ -9,7 +9,7 @@ export default function yajs(path: string): Transform {
     let context;
     let parser;
     const stream = through(
-        (chunk) => parser.parse(chunk),
+        (chunk: Buffer) => parser.parse(chunk),
         () => {
             parser.finish();
             stream.emit('end');
