@@ -8,7 +8,7 @@ For each library, a sequence of different datasets was used to process with equi
 
 See [bench](src/bench) for more details
 
-*Note: Due to the large size of the datasets, they are gzipped on disk and are gunzipped on the fly before feeding the library.*
+*NOTE: Due to the large size of the datasets, they are gzipped on disk and are gunzipped on the fly before feeding the library.*
 
 ## Datasets
 
@@ -21,8 +21,7 @@ Dataset | Format | Size  | Object size | Objects | Root Type
 
 ### Selection paths
 
-
-Dataset/Library   | yajs              | JSONStream             | oboe.js 
+Dataset/Library   | yajs              | JSONStream             | oboe.js
 :----------------:|-------------------|------------------------|----------------------------
 1                 | `$.field2.nested` | `field2.nested.*`      | `!.field2.nested[*]`
 2                 | `$..plugins`      | `_source..plugins.*`   | `!._source..plugins[*]`
@@ -35,9 +34,9 @@ Software    | Version
 ------------|-----------------------------------------
 OS          | Ubuntu 17.10 (kernel 4.13.0-25-generic)
 Node.js     | v9.4.0
-yajs        | 1.1.10
-oboe.js     | 2.1.4
+yajs        | 1.1.11
 JSONStream  | 1.3.2
+oboe.js     | 2.1.4
 
 ## Hardware Configuration
 
@@ -51,34 +50,34 @@ Disk     | Samsung | 250GB SSD 850 EVO mSATA (S248NXAH204096F)
 
 ### Dataset 1
 
-Library     | Completed | Total Time | Avg EPS | % Drop
-------------|:---------:|:----------:|:-------:|:-------:
-yajs        | Yes       | 21.400s    | 102.91k | -
-JSONStream  | Yes       | 27.428s    | 75.03k  | 37%
-oboe.js     | Yes       | 46.568s    | 43.68k  | 136%
+Library    | Completed |   Time   | Avg EPS | % Drop
+-----------|:---------:|:--------:|--------:|:-------:
+yajs       | Yes       | 19.679 s | 112.82K | -
+JSONstream | Yes       | 28.032 s | 73.35K  | 53.82%
+oboe.js    | Yes       | 47.899 s | 42.45K  | 165.77%
 
 ### Dataset 2
 
-Library     | Completed | Total Time  | Avg EPS | % Drop
-------------|:---------:|:-----------:|:-------:|:-------:
-yajs        | Yes       | 18m 14.663s | 9.15k   | -
-JSONStream  | Yes       | 39m 32.675s | 4.22k   | 117%
-oboe.js     | Yes       | 49m 06.582s | 3.39k   | 170%
+  Library  | Completed |      Time      | Avg EPS | % Drop
+-----------|:---------:|:--------------:|:-------:|:-------:
+yajs       | Yes       | 18 m, 8.521 s  | 9.20K   | -
+JSONStream | Yes       | 39 m, 24.74 s  | 4.23K   | 117.56%
+oboe.js    | Yes       | 49 m, 53.019 s | 3.34K   | 175.38%
 
 ### Dataset 3
 
-Library     | Completed | Total Time  | Avg EPS | % Drop
-------------|:---------:|:-----------:|:-------:|:-------:
-yajs        | Yes       | 27m 41.419s | 9.18k   | -
-JSONStream  | Yes       | 59m 53.814s | 4.08k   | 119%
-oboe.js     | No        | -           | -       | -
+  Library  | Completed |        Time        | Avg EPS | % Drop
+-----------|:---------:|:------------------:|:-------:|:-------:
+yajs       | Yes       | 26 m, 43.94 s      | 9.36K   | -
+JSONStream | Yes       | 1 h, 1 m, 33.646 s | 4.06K   | 130.52%
+oboe.js    | No        | -                  | -       | -
 
 ### Dataset 4
 
-Library     | Completed | Total Time  | Avg EPS | % Drop
-------------|:---------:|:-----------:|:-------:|:-------:
-yajs        | Yes       | 12m 33.618s | 372.51k | -
-JSONStream  | Yes       | 51m 58.657s | 89.79k  | 315%
-oboe.js     | No        | -           | -       | -
+  Library  | Completed |      Time      | Avg EPS | % Drop
+-----------|:---------:|:--------------:|:-------:|:-------:
+yajs       | Yes       | 11 m, 58.023 s | 391.03K | -
+JSONStream | Yes       | 52 m, 25.399 s | 89.04K  | 339.16%
+oboe.js    | No        | -              | -       | -
 
-*Note: oboe.js did not complete due to out of memory error*
+*NOTE: oboe.js did not complete due to out of memory error.*
