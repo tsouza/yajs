@@ -1,6 +1,24 @@
 import * as AsciiTable from 'ascii-table';
 import { fork } from 'child_process';
 import { Stats } from 'fast-stats';
+import * as humanizeDuration from 'humanize-duration';
+
+const time = humanizeDuration.humanizer({
+    language: 'shortEn',
+    languages: {
+      shortEn: {
+        y() { return 'y'; },
+        mo() { return 'mo'; },
+        w() { return 'w'; },
+        d() { return 'd'; },
+        h() { return 'h'; },
+        m() { return 'm'; },
+        s() { return 's'; },
+        ms() { return 'ms'; },
+        decimal: '.',
+      },
+    },
+  });
 
 const tableDataset1 = createTable(1);
 const tableDataset2 = createTable(2);
@@ -31,6 +49,7 @@ function benchmark(bench: string, dataset: number, path: string,
                    table: object, type: string = 'ndjson'): Promise<void> {
     const start = new Date().getTime();
     let count = 0;
+    let completed = false;
     console.log(`${dataset}-${bench}`);
     return new Promise<void>((resolve, reject) => {
         const stats = new Stats();
@@ -39,30 +58,35 @@ function benchmark(bench: string, dataset: number, path: string,
         }).
         on('message', (m) => {
             if (m.end) {
+                completed = true;
                 stats.push(m.rate.currentRate);
-                table.addRow(bench, new Date().getTime() - start,
-                    count, stats.min, stats.max, stats.amean(),
-                    stats.percentile(1),
-                    stats.percentile(10),
-                    stats.percentile(25),
-                    stats.percentile(50),
-                    stats.percentile(75),
-                    stats.percentile(90),
-                    stats.percentile(99));
+                const eps = stats.amean();
+                let drop;
+                if (bench === 'yajs') {
+                    drop = '-';
+                    table._base = eps;
+                } else {
+                    drop = (((table._base / eps) - 1) * 100).toFixed(2) + '%';
+                }
+                table.addRow(bench, 'Yes', time(new Date().getTime() - start),
+                    (eps / 1000).toFixed(2) + 'K', drop);
                 child.kill();
             } else {
                 count = m.rate.count;
                 console.log(`${dataset}-${bench}: ${count}`);
                 stats.push(m.rate.currentRate);
             }
-        }).on('exit', () => resolve());
+        }).on('exit', () => {
+            if (!completed) {
+                table.addRow(bench, 'No', '-', '-', '-');
+            }
+            resolve();
+        });
     });
 }
 
 function createTable(dataset: number) {
     const table = new AsciiTable(`dataset ${dataset}`);
-    table.setHeading('lib', 'time', 'count', 'min', 'max', 'mean',
-                    'p01', 'p10', 'p25', 'p50',
-                    'p75', 'p90', 'p99');
+    table.setHeading('Library', 'Completed', 'Time', 'Avg EPS', '% Drop');
     return table;
 }

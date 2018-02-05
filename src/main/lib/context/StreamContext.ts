@@ -40,7 +40,6 @@ export class StreamContext {
     }
 
     endObject(): void {
-        // this.currentKey = this.pathArray.pop();
         this.position.stepOutObject();
         this.dispatch((dispatcher) => dispatcher.endObject());
     }

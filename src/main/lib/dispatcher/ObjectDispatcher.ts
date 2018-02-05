@@ -27,7 +27,6 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
                     this.listener(result);
                 }
             }
-            // this.clear();
             return true;
         }
         return false;
@@ -35,13 +34,6 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
 
     endArray(): boolean {
         this.doEndArray();
-        if (this.isInRoot()) {
-            /*let result: any = this.peek().value;
-            if (this.listener)
-                this.listener(result);
-            this.clear();*/
-            return true;
-        }
-        return false;
+        return this.isInRoot();
     }
 }

@@ -4,6 +4,8 @@ export abstract class AbstractObjectBuilder {
 
     private stack: IJsonNode[];
     private stackSize: number = 0;
+    private top: IJsonNode;
+    private topDirty: boolean;
 
     constructor() {
         this.stack = [];
@@ -35,7 +37,11 @@ export abstract class AbstractObjectBuilder {
     }
 
     peek(): IJsonNode {
-        return this.stack[this.stackSize - 1];
+        if (this.topDirty) {
+            this.top = this.stack[this.stackSize - 1];
+            this.topDirty = false;
+        }
+        return this.top;
     }
 
     protected doEndObject(): void {
@@ -48,10 +54,12 @@ export abstract class AbstractObjectBuilder {
 
     private pop(): void {
         this.stackSize--;
+        this.topDirty = true;
     }
 
     private push(node: IJsonNode): void {
-        this.stack[this.stackSize++] = node;
+         this.stack[this.stackSize++] = this.top = node;
+         this.topDirty = false;
     }
  }
 

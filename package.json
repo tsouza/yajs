@@ -35,8 +35,7 @@
     "antlr4": "^4.7.1",
     "antlr4ts": "^0.4.1-alpha.0",
     "lodash": "^4.17.4",
-    "through": "^2.3.8",
-    "ts-iterable": "^1.0.1"
+    "through": "^2.3.8"
   },
   "devDependencies": {
     "@types/bluebird": "^3.5.19",
@@ -56,6 +55,7 @@
     "gulp-copy": "^1.1.0",
     "gulp-file-copy": "0.0.1",
     "gulp-typescript": "^3.2.3",
+    "humanize-duration": "^3.12.1",
     "measured": "^1.1.0",
     "mocha": "^4.1.0",
     "oboe": "^2.1.4",

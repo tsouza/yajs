@@ -1,6 +1,5 @@
 import { ANTLRInputStream, CommonTokenStream } from 'antlr4ts';
 import { AbstractParseTreeVisitor } from 'antlr4ts/tree';
-import { Iterable } from 'ts-iterable';
 import { ChildNode } from './operator/ChildNode';
 import { Descendant } from './operator/Descendant';
 import { Root } from './operator/Root';
@@ -11,10 +10,12 @@ import { ActionProjectContext, PathStepContext, YAJSParser } from './parser/YAJS
 import { PathOperator } from './PathOperator';
 import { PathParent } from './PathParent';
 
-export class YAJSPath extends Iterable<PathOperator> {
+export class YAJSPath {
 
     protected operators: PathOperator[];
     protected size: number = 0;
+    protected topDirty: boolean;
+    private top: PathOperator;
 
     private mProjectExpr: string;
     private mProjectKeys: string[];
@@ -23,7 +24,6 @@ export class YAJSPath extends Iterable<PathOperator> {
     private mMinimumDepth = 0;
 
     constructor(operators: PathOperator[] = [], projectExpression: string = '', projectKeys: string[] = []) {
-        super();
         this.operators = [];
         this.mProjectExpr = projectExpression;
         this.mProjectKeys = projectKeys;
@@ -76,11 +76,11 @@ export class YAJSPath extends Iterable<PathOperator> {
     }
 
     peek(): PathOperator {
-        return this.operators[this.size - 1];
-    }
-
-    clear(): void {
-        this.operators = [];
+        if (this.topDirty) {
+            this.top = this.operators[this.size - 1];
+            this.topDirty = false;
+        }
+        return this.top;
     }
 
     pathDepth(): number {
@@ -117,22 +117,17 @@ export class YAJSPath extends Iterable<PathOperator> {
         return this.mProjectKeys;
     }
 
-    protected current(key: number): PathOperator {
-        return this.operators[key];
-    }
-
-    protected valid(key: number): boolean {
-        return key < this.size;
-    }
-
     protected push(operator: PathOperator): void {
-        const parent = this.operators[this.size - 1];
-        operator.parent = new PathParent(parent);
-        this.operators[this.size++] = operator;
+        if (this.size) {
+            operator.parent = new PathParent(this.operators[this.size - 1]);
+        }
+        this.operators[this.size++] = this.top = operator;
+        this.topDirty = false;
     }
 
     protected pop(): void {
         this.size--;
+        this.topDirty = true;
     }
 }
 
