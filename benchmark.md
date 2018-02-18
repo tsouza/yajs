@@ -50,7 +50,7 @@ Disk     | Samsung | 250GB SSD 850 EVO mSATA (S248NXAH204096F)
 
 ### Dataset 1
 
-Library    | Completed |   Time   | Avg EPS | % Drop
+Library    | Completed |   Time   | Avg EPS | % Diff
 -----------|:---------:|:--------:|--------:|:-------:
 yajs       | Yes       | 19.679 s | 112.82K | -
 JSONstream | Yes       | 28.032 s | 73.35K  | 53.82%
@@ -58,7 +58,7 @@ oboe.js    | Yes       | 47.899 s | 42.45K  | 165.77%
 
 ### Dataset 2
 
-  Library  | Completed |      Time      | Avg EPS | % Drop
+  Library  | Completed |      Time      | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 18 m, 8.521 s  | 9.20K   | -
 JSONStream | Yes       | 39 m, 24.74 s  | 4.23K   | 117.56%
@@ -66,7 +66,7 @@ oboe.js    | Yes       | 49 m, 53.019 s | 3.34K   | 175.38%
 
 ### Dataset 3
 
-  Library  | Completed |        Time        | Avg EPS | % Drop
+  Library  | Completed |        Time        | Avg EPS | % Diff
 -----------|:---------:|:------------------:|:-------:|:-------:
 yajs       | Yes       | 26 m, 43.94 s      | 9.36K   | -
 JSONStream | Yes       | 1 h, 1 m, 33.646 s | 4.06K   | 130.52%
@@ -74,7 +74,7 @@ oboe.js    | No        | -                  | -       | -
 
 ### Dataset 4
 
-  Library  | Completed |      Time      | Avg EPS | % Drop
+  Library  | Completed |      Time      | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 11 m, 58.023 s | 391.03K | -
 JSONStream | Yes       | 52 m, 25.399 s | 89.04K  | 339.16%
