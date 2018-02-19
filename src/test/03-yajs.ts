@@ -18,7 +18,17 @@ describe('yajs', () => {
             }));
 
     it('should parse triple double quotes json', () =>
-        test('triple-dquotes', '$').then(r => console.log(r)));
+        test('triple-dquotes', '$').then((r) => r[0]).
+        then((actual: any) => {
+            // tslint:disable-next-line:no-unused-expression
+            expect(actual.path).to.be.empty;
+            expect(actual.value).to.be.deep.equal({
+                test1: '',
+                test2: '\n    "test" \\"test\\" ""\n',
+                test3: '"',
+                test4: 'test " test',
+            });
+    }));
 
     it('should parse ndjson', () =>
         all([test('ndjson', '$'),

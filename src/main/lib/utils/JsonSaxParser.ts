@@ -160,6 +160,7 @@ export class JsonSaxParser {
       case TDQSTR2:
         n = buffer[i];
         if (n !== 0x22) {
+          i--;
           this.callbacks.onString('');
           this.str = undefined;
           this.state = START;
@@ -183,6 +184,7 @@ export class JsonSaxParser {
         this.state = STRING1;
         continue;
       case TDQSTR6:
+        i--;
         tdq = false;
         this.callbacks.onString(this.str);
         this.str = undefined;
