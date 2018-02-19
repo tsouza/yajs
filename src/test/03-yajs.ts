@@ -17,6 +17,9 @@ describe('yajs', () => {
                 expect(actual.value).to.be.deep.equal(expected);
             }));
 
+    it('should parse triple double quotes json', () =>
+        test('triple-dquotes', '$').then(r => console.log(r)));
+
     it('should parse ndjson', () =>
         all([test('ndjson', '$'),
             toString('ndjson').then((j) => j.

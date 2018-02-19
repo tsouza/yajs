@@ -46,6 +46,12 @@ const STRING3 = C.STRING3 = 0x63;
 const STRING4 = C.STRING4 = 0x64;
 const STRING5 = C.STRING5 = 0x65;
 const STRING6 = C.STRING6 = 0x66;
+const TDQSTR1 = C.TDQSTR1 = 0x71;
+const TDQSTR2 = C.TDQSTR2 = 0x72;
+const TDQSTR3 = C.TDQSTR3 = 0x73;
+const TDQSTR4 = C.TDQSTR4 = 0x74;
+const TDQSTR5 = C.TDQSTR5 = 0x75;
+const TDQSTR6 = C.TDQSTR6 = 0x76;
 
 // Slow code to string converter (only used when throwing syntax errors)
 function toknam(code) {
@@ -61,7 +67,8 @@ export class JsonSaxParser {
 
   private callbacks: JsonSaxParser.ICallbacks;
 
-  private state: number;
+  private mState: number;
+  private lastState: number;
   private str: string;
   private unicode: string;
   private negative: boolean;
@@ -75,8 +82,18 @@ export class JsonSaxParser {
     this.state = START;
   }
 
+  private get state(): number {
+    return this.mState;
+  }
+
+  private set state(state: number) {
+    this.lastState = this.mState;
+    this.mState = state;
+  }
+
   parse(buffer: Buffer) {
     let n;
+    let tdq = false;
     for (let i = 0, l = buffer.length; i < l; i++) {
       switch (this.state) {
       case START:
@@ -111,7 +128,7 @@ export class JsonSaxParser {
           continue;
         case 0x22: // `"`
           this.str = '';
-          this.state = STRING1;
+          this.state = TDQSTR1;
           continue;
         case 0x2d: // `-`
           this.negative = true;
@@ -131,19 +148,68 @@ export class JsonSaxParser {
           continue; // whitespace
         }
         this.charError(buffer, i);
+      case TDQSTR1:
+        n = buffer[i];
+        if (n !== 0x22) {
+          i--;
+          this.state = STRING1;
+        } else {
+          this.state = TDQSTR2;
+        }
+        continue;
+      case TDQSTR2:
+        n = buffer[i];
+        if (n !== 0x22) {
+          this.callbacks.onString('');
+          this.str = undefined;
+          this.state = START;
+        } else {
+          tdq = true;
+          this.state = STRING1;
+        }
+        continue;
+      case TDQSTR3: case TDQSTR4: case TDQSTR5:
+        n = buffer[i];
+        if (n === 0x22) {
+          this.state++;
+          continue;
+        } else {
+          i--;
+          this.str += '"';
+          if (this.state === TDQSTR5) {
+            this.str += '"';
+          }
+        }
+        this.state = STRING1;
+        continue;
+      case TDQSTR6:
+        tdq = false;
+        this.callbacks.onString(this.str);
+        this.str = undefined;
+        this.state = START;
+        continue;
       case STRING1: // After open quote
         n = buffer[i];
         switch (n) {
         case 0x22: // `"`
-          this.callbacks.onString(this.str);
-          this.str = undefined;
-          this.state = START;
-          continue;
+          if (!tdq) {
+            this.callbacks.onString(this.str);
+            this.str = undefined;
+            this.state = START;
+            continue;
+          } else if (tdq) {
+            i--;
+            this.state = TDQSTR3;
+            continue;
+          }
+          this.charError(buffer, i);
         case 0x5c: // `\`
-          this.state = STRING2;
-          continue;
+          if (!tdq) {
+            this.state = STRING2;
+            continue;
+          }
         }
-        if (n >= 0x20) {
+        if (n >= 0x20 || ((n === 13 || n === 10) && tdq)) {
           this.str += String.fromCharCode(n);
           continue;
         }
