@@ -34,7 +34,7 @@ Software    | Version
 ------------|-----------------------------------------
 OS          | Ubuntu 17.10 (kernel 4.13.0-25-generic)
 Node.js     | v9.4.0
-yajs        | 1.1.11
+yajs        | 1.2.0
 JSONStream  | 1.3.2
 oboe.js     | 2.1.4
 
@@ -52,32 +52,32 @@ Disk     | Samsung | 250GB SSD 850 EVO mSATA (S248NXAH204096F)
 
 Library    | Completed |   Time   | Avg EPS | % Diff
 -----------|:---------:|:--------:|--------:|:-------:
-yajs       | Yes       | 19.679 s | 112.82K | -
-JSONstream | Yes       | 28.032 s | 73.35K  | 53.82%
-oboe.js    | Yes       | 47.899 s | 42.45K  | 165.77%
+yajs       | Yes       | 20.495 s | 108.55K | -
+JSONstream | Yes       | 27.227 s | 75.60K  | 43.59%
+oboe.js    | Yes       | 46.54 s  | 43.70K  | 148.37%
 
 ### Dataset 2
 
-  Library  | Completed |      Time      | Avg EPS | % Diff
------------|:---------:|:--------------:|:-------:|:-------:
-yajs       | Yes       | 18 m, 8.521 s  | 9.20K   | -
-JSONStream | Yes       | 39 m, 24.74 s  | 4.23K   | 117.56%
-oboe.js    | Yes       | 49 m, 53.019 s | 3.34K   | 175.38%
+  Library  | Completed |     Time      | Avg EPS | % Diff
+-----------|:---------:|:-------------:|:-------:|:-------:
+yajs       | Yes       | 14 m, 55.52 s | 11.19K  | -
+JSONstream | Yes       | 39 m, 1.709 s | 4.27K   | 161.98%
+oboe.js    | Yes       | 51 m, 3.245 s | 3.27K   | 242.73%
 
 ### Dataset 3
 
-  Library  | Completed |        Time        | Avg EPS | % Diff
------------|:---------:|:------------------:|:-------:|:-------:
-yajs       | Yes       | 26 m, 43.94 s      | 9.36K   | -
-JSONStream | Yes       | 1 h, 1 m, 33.646 s | 4.06K   | 130.52%
-oboe.js    | No        | -                  | -       | -
+  Library  | Completed |        Time    | Avg EPS | % Diff
+-----------|:---------:|:--------------:|:-------:|:-------:
+yajs       | Yes       | 22 m, 7.247 s  | 11.32K  | -
+JSONstream | Yes       | 59 m, 29.688 s | 4.20K   | 169.30%
+oboe.js    | No        | -              | -       | -
 
 ### Dataset 4
 
   Library  | Completed |      Time      | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
-yajs       | Yes       | 11 m, 58.023 s | 391.03K | -
-JSONStream | Yes       | 52 m, 25.399 s | 89.04K  | 339.16%
+yajs       | Yes       | 12 m, 41.935 s | 368.44K | -
+JSONstream | Yes       | 52 m, 32.502 s | 88.84K  | 314.73%
 oboe.js    | No        | -              | -       | -
 
 *NOTE: oboe.js did not complete due to out of memory error.*
