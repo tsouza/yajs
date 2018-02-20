@@ -33,7 +33,7 @@ Dataset/Library   | yajs              | JSONStream             | oboe.js
 Software    | Version
 ------------|-----------------------------------------
 OS          | Ubuntu 17.10 (kernel 4.13.0-25-generic)
-Node.js     | v9.4.0
+Node.js     | 9.5.0
 yajs        | 1.2.0
 JSONStream  | 1.3.2
 oboe.js     | 2.1.4
