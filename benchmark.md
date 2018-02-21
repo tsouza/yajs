@@ -53,7 +53,7 @@ Disk     | Samsung | 250GB SSD 850 EVO mSATA (S248NXAH204096F)
 Library    | Completed |   Time   | Avg EPS | % Diff
 -----------|:---------:|:--------:|--------:|:-------:
 yajs       | Yes       | 20.495 s | 108.55K | -
-JSONstream | Yes       | 27.227 s | 75.60K  | 43.59%
+JSONStream | Yes       | 27.227 s | 75.60K  | 43.59%
 oboe.js    | Yes       | 46.54 s  | 43.70K  | 148.37%
 
 ### Dataset 2
@@ -61,7 +61,7 @@ oboe.js    | Yes       | 46.54 s  | 43.70K  | 148.37%
   Library  | Completed |     Time      | Avg EPS | % Diff
 -----------|:---------:|:-------------:|:-------:|:-------:
 yajs       | Yes       | 14 m, 55.52 s | 11.19K  | -
-JSONstream | Yes       | 39 m, 1.709 s | 4.27K   | 161.98%
+JSONStream | Yes       | 39 m, 1.709 s | 4.27K   | 161.98%
 oboe.js    | Yes       | 51 m, 3.245 s | 3.27K   | 242.73%
 
 ### Dataset 3
@@ -69,7 +69,7 @@ oboe.js    | Yes       | 51 m, 3.245 s | 3.27K   | 242.73%
   Library  | Completed |        Time    | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 22 m, 7.247 s  | 11.32K  | -
-JSONstream | Yes       | 59 m, 29.688 s | 4.20K   | 169.30%
+JSONStream | Yes       | 59 m, 29.688 s | 4.20K   | 169.30%
 oboe.js    | No        | -              | -       | -
 
 ### Dataset 4
@@ -77,7 +77,7 @@ oboe.js    | No        | -              | -       | -
   Library  | Completed |      Time      | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 12 m, 41.935 s | 368.44K | -
-JSONstream | Yes       | 52 m, 32.502 s | 88.84K  | 314.73%
+JSONStream | Yes       | 52 m, 32.502 s | 88.84K  | 314.73%
 oboe.js    | No        | -              | -       | -
 
 *NOTE: oboe.js did not complete due to out of memory error.*
