@@ -14,8 +14,7 @@ export class YAJSPath {
 
     protected operators: PathOperator[];
     protected size: number = 0;
-    protected topDirty: boolean;
-    private top: PathOperator;
+    protected top: PathOperator;
 
     private mProjectExpr: string;
     private mProjectKeys: string[];
@@ -58,9 +57,10 @@ export class YAJSPath {
             }
 
             const o1 = this.operators[pointer1--];
+            const o1Type = o1.getType();
             let o2 = jsonPath.operators[pointer2--];
 
-            if (o1.getType() === PathOperator.Type.DESCENDANT) {
+            if (o1Type === PathOperator.Type.DESCENDANT) {
                 const prevScan = this.operators[pointer1--];
                 while (!prevScan.match(o2) && pointer2 >= 0) {
                     o2 = jsonPath.operators[pointer2--];
@@ -76,11 +76,7 @@ export class YAJSPath {
     }
 
     peek(): PathOperator {
-        if (this.topDirty) {
-            this.top = this.operators[this.size - 1];
-            this.topDirty = false;
-        }
-        return this.top;
+        return this.top || (this.top = this.operators[this.size - 1]);
     }
 
     pathDepth(): number {
@@ -90,9 +86,9 @@ export class YAJSPath {
     path(): string[] {
         const result = [];
         for (let i = 0; i < this.size; i++) {
-            const op = this.operators[i];
-            if (op.getType() === PathOperator.Type.OBJECT && (op as ChildNode).key) {
-                result.push((op as ChildNode).key);
+            const op: any = this.operators[i];
+            if (op.key) {
+                result.push(op.key);
             }
         }
         return result;
@@ -121,12 +117,11 @@ export class YAJSPath {
             operator.parent = new PathParent(this.operators[this.size - 1]);
         }
         this.operators[this.size++] = this.top = operator;
-        this.topDirty = false;
     }
 
     protected pop(): void {
         this.size--;
-        this.topDirty = true;
+        this.top = undefined;
     }
 }
 

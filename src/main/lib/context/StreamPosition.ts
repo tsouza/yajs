@@ -14,7 +14,7 @@ export class StreamPosition extends YAJSPath {
             if (next.getType() === PathOperator.Type.OBJECT) {
                 this.size++;
                 (next as ChildNode).key = undefined;
-                this.topDirty = true;
+                this.top = undefined;
                 return;
             }
         }
@@ -34,7 +34,7 @@ export class StreamPosition extends YAJSPath {
             const next = this.operators[this.size];
             if (next.getType() === PathOperator.Type.ARRAY) {
                 this.size++;
-                this.topDirty = true;
+                this.top = undefined;
                 return;
             }
         }

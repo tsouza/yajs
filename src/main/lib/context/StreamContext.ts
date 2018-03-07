@@ -7,18 +7,19 @@ import { StreamPosition } from './StreamPosition';
 export class StreamContext {
 
     private position: StreamPosition;
-    private path: YAJSPath;
-    private listener: (value?: any) => void;
+    private readonly path: YAJSPath;
 
     private dispatchers: ObjectDispatcher[] = [];
     private dispatcher: ObjectDispatcher;
 
+    private readonly onMatchListener: (value?: any) => void;
     private readonly onValueListener: (value: any) => any;
 
-    constructor(path: YAJSPath, listener: (path: string[], value?: any) => void) {
+    constructor(path: YAJSPath, onMatch: (path: string[], value?: any) => void) {
         this.path = path;
-        this.listener = (value?: any) =>
-            listener(this.position.path(), value);
+
+        this.onMatchListener = (value?: any) =>
+            onMatch(this.position.path(), value);
 
         this.onValueListener = isEmpty(path.projectExpression) ?
             (value) => this.doOnValue(value) : (value) => value;
@@ -88,7 +89,7 @@ export class StreamContext {
         if (this.path.definite || this.path.minimumDepth <= currentDepth) {
             if (this.path.match(this.position)) {
                 if (value !== undefined) {
-                    this.listener(value);
+                    this.onMatchListener(value);
                 } else {
                     const dispatcher = new ObjectDispatcher(this.listener,
                         this.path.projectExpression,
