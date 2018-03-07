@@ -91,7 +91,7 @@ export class StreamContext {
                 if (value !== undefined) {
                     this.onMatchListener(value);
                 } else {
-                    const dispatcher = new ObjectDispatcher(this.listener,
+                    const dispatcher = new ObjectDispatcher(this.onMatchListener,
                         this.path.projectExpression,
                         this.path.projectKeys);
 
