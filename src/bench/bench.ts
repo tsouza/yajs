@@ -87,6 +87,6 @@ function benchmark(bench: string, dataset: number, path: string,
 
 function createTable(dataset: number) {
     const table = new AsciiTable(`dataset ${dataset}`);
-    table.setHeading('Library', 'Completed', 'Time', 'Avg EPS', '% Drop');
+    table.setHeading('Library', 'Completed', 'Time', 'Avg EPS', '% Diff');
     return table;
 }

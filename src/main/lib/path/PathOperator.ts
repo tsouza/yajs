@@ -13,6 +13,10 @@ export abstract class PathOperator {
     referencedBy(key: string): boolean | undefined {
         return this.parent && this.parent.contains(key);
     }
+
+    onValue(delegateOnMatch: () => void): void {
+        delegateOnMatch();
+    }
 }
 
 export namespace PathOperator {

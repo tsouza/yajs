@@ -13,10 +13,15 @@ export class StreamContext {
     private dispatchers: ObjectDispatcher[] = [];
     private dispatcher: ObjectDispatcher;
 
+    private readonly onValueListener: (value: any) => any;
+
     constructor(path: YAJSPath, listener: (path: string[], value?: any) => void) {
         this.path = path;
         this.listener = (value?: any) =>
             listener(this.position.path(), value);
+
+        this.onValueListener = isEmpty(path.projectExpression) ?
+            (value) => this.doOnValue(value) : (value) => value;
     }
 
     reset(): void {
@@ -28,10 +33,7 @@ export class StreamContext {
         if (this.isInRoot()) {
             this.reset();
         }
-        const currentNode = this.position.peek();
-        if (currentNode.getType() !== PathOperator.Type.ROOT) {
-            this.match();
-        }
+        this.doOnValue();
         this.position.stepIntoObject();
         this.dispatch((dispatcher) => {
             dispatcher.startObject();
@@ -69,16 +71,16 @@ export class StreamContext {
     }
 
     onValue(value: any): void {
-        if (isEmpty(this.path.projectExpression)) {
-            const currentNode = this.position.peek();
-            if (currentNode.getType() !== PathOperator.Type.ROOT) {
-                this.match(value);
-            }
-        }
+        this.onValueListener(value);
         this.dispatch((dispatcher) => {
             dispatcher.onValue(value);
             return false;
         });
+    }
+
+    doOnValue(value?: any): void {
+        this.position.peek().
+            onValue(() => this.match(value));
     }
 
     private match(value?: any): boolean {
