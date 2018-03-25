@@ -9,8 +9,8 @@ export class StreamPosition extends YAJSPath {
     private hasOnlyArrayIndex = true;
 
     stepIntoObject() {
-        if (this.operators.length > this.size) {
-            const next = this.operators[this.size];
+        if (this.stack.length > this.size) {
+            const next = this.peekPrevious();
             if (next.getType() === PathOperator.Type.OBJECT) {
                 this.size++;
                 (next as ChildNode).key = undefined;
@@ -30,8 +30,8 @@ export class StreamPosition extends YAJSPath {
     }
 
     stepIntoArray() {
-        if (this.operators.length > this.size) {
-            const next = this.operators[this.size];
+        if (this.stack.length > this.size) {
+            const next = this.peekPrevious();
             if (next.getType() === PathOperator.Type.ARRAY) {
                 this.size++;
                 this.top = undefined;
@@ -50,7 +50,7 @@ export class StreamPosition extends YAJSPath {
             this.peek().getType() === PathOperator.Type.ROOT;
     }
 
-    protected push(operator: PathOperator): void {
+    push(operator: PathOperator): void {
         if (operator.getType() !== PathOperator.Type.ARRAY) {
             this.hasOnlyArrayIndex = false;
         } else if (this.hasOnlyArrayIndex) {
@@ -59,7 +59,7 @@ export class StreamPosition extends YAJSPath {
         super.push(operator);
     }
 
-    protected pop(): void {
+    pop(): void {
         super.pop();
         const pathDepth = this.pathDepth();
         if (pathDepth <= this.rootIndex) {

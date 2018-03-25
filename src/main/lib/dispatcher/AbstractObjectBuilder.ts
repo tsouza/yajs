@@ -1,14 +1,17 @@
-export abstract class AbstractObjectBuilder {
+import { Stack } from '../utils/Stack';
+
+export abstract class AbstractObjectBuilder extends Stack<IJsonNode> {
 
     fieldName?: string;
 
-    private stack: IJsonNode[];
+    /*private stack: IJsonNode[];
     private stackSize: number = 0;
     private top: IJsonNode;
-    private topDirty: boolean;
+    private topDirty: boolean;*/
 
     constructor() {
-        this.stack = [];
+        // this.stack = [];
+        super();
         this.push(new RootNode());
     }
 
@@ -36,13 +39,13 @@ export abstract class AbstractObjectBuilder {
         return this.peek().root;
     }
 
-    peek(): IJsonNode {
+    /*peek(): IJsonNode {
         if (this.topDirty) {
             this.top = this.stack[this.stackSize - 1];
             this.topDirty = false;
         }
         return this.top;
-    }
+    }*/
 
     protected doEndObject(): void {
         this.pop();
@@ -52,7 +55,7 @@ export abstract class AbstractObjectBuilder {
         this.pop();
     }
 
-    private pop(): void {
+    /*private pop(): void {
         this.stackSize--;
         this.topDirty = true;
     }
@@ -60,7 +63,7 @@ export abstract class AbstractObjectBuilder {
     private push(node: IJsonNode): void {
          this.stack[this.stackSize++] = this.top = node;
          this.topDirty = false;
-    }
+    }*/
  }
 
 interface IJsonNode {

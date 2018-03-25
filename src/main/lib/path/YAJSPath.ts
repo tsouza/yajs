@@ -1,5 +1,6 @@
 import { ANTLRInputStream, CommonTokenStream } from 'antlr4ts';
 import { AbstractParseTreeVisitor } from 'antlr4ts/tree';
+import { Stack } from '../utils/Stack';
 import { ChildNode } from './operator/ChildNode';
 import { Descendant } from './operator/Descendant';
 import { Root } from './operator/Root';
@@ -10,11 +11,11 @@ import { ActionProjectContext, PathStepContext, YAJSParser } from './parser/YAJS
 import { PathOperator } from './PathOperator';
 import { PathParent } from './PathParent';
 
-export class YAJSPath {
+export class YAJSPath/* extends Stack<PathOperator>*/ {
 
-    protected operators: PathOperator[];
+    /* protected operators: PathOperator[];
     protected size: number = 0;
-    protected top: PathOperator;
+    protected top: PathOperator; */
 
     private mProjectExpr: string;
     private mProjectKeys: string[];
@@ -22,8 +23,11 @@ export class YAJSPath {
     private mDefinite = true;
     private mMinimumDepth = 0;
 
+    private mStack = new Stack<PathOperator>();
+
     constructor(operators: PathOperator[] = [], projectExpression: string = '', projectKeys: string[] = []) {
-        this.operators = [];
+        // super();
+        // this.operators = [];
         this.mProjectExpr = projectExpression;
         this.mProjectKeys = projectKeys;
 
@@ -34,7 +38,7 @@ export class YAJSPath {
             throw new Error('Descendant shouldn\'t be the last operator.');
         }
 
-        this.operators.forEach((operator) => {
+        this.stack.forEach((operator) => {
             if (operator.getType() !== PathOperator.Type.DESCENDANT) {
                 this.mMinimumDepth++;
             } else {
@@ -43,11 +47,45 @@ export class YAJSPath {
         });
     }
 
+    protected get size(): number {
+        return this.mStack.size;
+    }
+
+    protected set size(size: number) {
+        this.mStack.size = size;
+    }
+
+    protected set top(operator: PathOperator) {
+        this.mStack.top = operator;
+    }
+    protected get stack(): PathOperator[] {
+        return this.mStack.stack;
+    }
+
+    peek(): PathOperator {
+        return this.mStack.peek();
+    }
+
+    push(operator: PathOperator): void {
+        if (this.size) {
+            operator.parent = new PathParent(this.peek());
+        }
+        this.mStack.push(operator);
+    }
+
+    pop(): void {
+        this.mStack.pop();
+    }
+
+    peekPrevious(): PathOperator {
+        return this.mStack.peekPrevious();
+    }
+
     match(jsonPath: YAJSPath): boolean {
         let pointer1 = this.size - 1;
         let pointer2 = jsonPath.size - 1;
 
-        if (!this.operators[pointer1].match(jsonPath.operators[pointer2])) {
+        if (!this.stack[pointer1].match(jsonPath.stack[pointer2])) {
             return false;
         }
 
@@ -56,14 +94,14 @@ export class YAJSPath {
                 return false;
             }
 
-            const o1 = this.operators[pointer1--];
+            const o1 = this.stack[pointer1--];
             const o1Type = o1.getType();
-            let o2 = jsonPath.operators[pointer2--];
+            let o2 = jsonPath.stack[pointer2--];
 
             if (o1Type === PathOperator.Type.DESCENDANT) {
-                const prevScan = this.operators[pointer1--];
+                const prevScan = this.stack[pointer1--];
                 while (!prevScan.match(o2) && pointer2 >= 0) {
-                    o2 = jsonPath.operators[pointer2--];
+                    o2 = jsonPath.stack[pointer2--];
                 }
             } else if (o2.getType() === PathOperator.Type.ARRAY) {
                 pointer1++;
@@ -75,10 +113,6 @@ export class YAJSPath {
         return pointer2 < 0;
     }
 
-    peek(): PathOperator {
-        return this.top || (this.top = this.operators[this.size - 1]);
-    }
-
     pathDepth(): number {
         return this.size;
     }
@@ -86,7 +120,7 @@ export class YAJSPath {
     path(): string[] {
         const result = [];
         for (let i = 0; i < this.size; i++) {
-            const op: any = this.operators[i];
+            const op: any = this.stack[i];
             if (op.key) {
                 result.push(op.key);
             }
@@ -112,17 +146,10 @@ export class YAJSPath {
         return this.mProjectKeys;
     }
 
-    protected push(operator: PathOperator): void {
-        if (this.size) {
-            operator.parent = new PathParent(this.operators[this.size - 1]);
-        }
-        this.operators[this.size++] = this.top = operator;
-    }
-
-    protected pop(): void {
+    /* protected pop(): void {
         this.size--;
         this.top = undefined;
-    }
+    }*/
 }
 
 export namespace YAJSPath {
