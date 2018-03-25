@@ -10,7 +10,7 @@ export class StreamPosition extends YAJSPath {
 
     stepIntoObject() {
         if (this.stack.length > this.size) {
-            const next = this.peekPrevious();
+            const next = this.previousPeek();
             if (next.getType() === PathOperator.Type.OBJECT) {
                 this.size++;
                 (next as ChildNode).key = undefined;
@@ -31,7 +31,7 @@ export class StreamPosition extends YAJSPath {
 
     stepIntoArray() {
         if (this.stack.length > this.size) {
-            const next = this.peekPrevious();
+            const next = this.previousPeek();
             if (next.getType() === PathOperator.Type.ARRAY) {
                 this.size++;
                 this.top = undefined;

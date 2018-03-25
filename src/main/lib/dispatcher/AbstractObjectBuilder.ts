@@ -96,11 +96,11 @@ class ObjectNode implements IJsonNode {
     }
 
     handle(value: any, builder: AbstractObjectBuilder): void {
-        const fieldName = builder.fieldName;
-        if (fieldName) {
-            this.value[fieldName] = value;
-            builder.fieldName = undefined;
-        }
+        // const fieldName = builder.fieldName;
+        // if (fieldName) {
+            this.value[builder.fieldName] = value;
+        //    builder.fieldName = undefined;
+        // }
     }
 }
 

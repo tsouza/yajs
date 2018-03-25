@@ -18,7 +18,7 @@ export class Stack<E> {
         this.top = undefined;
     }
 
-    peekPrevious(): E {
+    previousPeek(): E {
         return this.stack[this.size];
     }
 }

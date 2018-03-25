@@ -77,8 +77,8 @@ export class YAJSPath/* extends Stack<PathOperator>*/ {
         this.mStack.pop();
     }
 
-    peekPrevious(): PathOperator {
-        return this.mStack.peekPrevious();
+    previousPeek(): PathOperator {
+        return this.mStack.previousPeek();
     }
 
     match(jsonPath: YAJSPath): boolean {
