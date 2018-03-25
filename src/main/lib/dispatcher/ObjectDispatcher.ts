@@ -8,24 +8,22 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
 
     private filterHelper: ScriptFilterHelper;
 
-    constructor(listener: (value?: any) => void, projectExpression: string = '', projectKeys: string[] = []) {
+    constructor(listener: (value?: any) => any, projectExpression: string = '', projectKeys: string[] = []) {
         super();
-        this.listener = listener;
+        this.listener = listener || ((value?: any) => value);
         this.filterHelper = new ScriptFilterHelper(projectKeys, projectExpression);
     }
 
     endObject(): boolean {
         this.doEndObject();
         if (this.isInRoot()) {
-            const result: any = this.peek().value;
-            if (this.listener) {
-                if (this.filterHelper.isFiltered()) {
-                    if (this.filterHelper.filters((key) => key in result)) {
-                        this.listener(result);
-                    }
-                } else {
+            if (this.filterHelper.isFiltered()) {
+                const result: any = this.peek().value;
+                if (this.filterHelper.filters((key) => key in result)) {
                     this.listener(result);
                 }
+            } else {
+                this.listener(this.peek().value);
             }
             return true;
         }
