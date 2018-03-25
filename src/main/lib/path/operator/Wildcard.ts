@@ -8,10 +8,7 @@ export class Wildcard extends AbstractFilteredOperator {
     }
 
     match(operator: PathOperator): boolean {
-        if (this.filterHelper.isFiltered()) {
-            return this.matchFilter(operator);
-        }
-        return true;
+        return this.matchFilter(true, operator);
     }
 
     getType(): PathOperator.Type {

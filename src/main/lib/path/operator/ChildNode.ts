@@ -11,14 +11,7 @@ export class ChildNode extends AbstractFilteredOperator {
     }
 
     match(operator: PathOperator): boolean {
-        if (operator.getType() === PathOperator.Type.ARRAY) {
-            return true;
-        }
-        const matched = super.match(operator) && this.key === (operator as ChildNode).key;
-        if (matched && this.filterHelper.isFiltered()) {
-            return this.matchFilter(operator);
-        }
-        return matched;
+        return this.matchFilter(this.matches(operator), operator);
     }
 
     getType(): PathOperator.Type {
@@ -27,5 +20,10 @@ export class ChildNode extends AbstractFilteredOperator {
 
     toString(): string {
         return `.${this.key}`;
+    }
+
+    private matches(operator: PathOperator): boolean {
+        return operator.getType() === PathOperator.Type.ARRAY ||
+            this.key === (operator as any).key;
     }
 }
