@@ -1,17 +1,12 @@
 import { Stack } from '../utils/Stack';
 
-export abstract class AbstractObjectBuilder extends Stack<IJsonNode> {
+export abstract class AbstractObjectBuilder /*extends Stack<IJsonNode>*/ {
 
     fieldName?: string;
-
-    /*private stack: IJsonNode[];
-    private stackSize: number = 0;
-    private top: IJsonNode;
-    private topDirty: boolean;*/
+    private mStack = new Stack<IJsonNode>();
 
     constructor() {
-        // this.stack = [];
-        super();
+        // super();
         this.push(new RootNode());
     }
 
@@ -39,13 +34,9 @@ export abstract class AbstractObjectBuilder extends Stack<IJsonNode> {
         return this.peek().root;
     }
 
-    /*peek(): IJsonNode {
-        if (this.topDirty) {
-            this.top = this.stack[this.stackSize - 1];
-            this.topDirty = false;
-        }
-        return this.top;
-    }*/
+    peek(): IJsonNode {
+        return this.mStack.peek();
+    }
 
     protected doEndObject(): void {
         this.pop();
@@ -55,16 +46,14 @@ export abstract class AbstractObjectBuilder extends Stack<IJsonNode> {
         this.pop();
     }
 
-    /*private pop(): void {
-        this.stackSize--;
-        this.topDirty = true;
+    protected pop(): void {
+        this.mStack.pop();
     }
 
-    private push(node: IJsonNode): void {
-         this.stack[this.stackSize++] = this.top = node;
-         this.topDirty = false;
-    }*/
- }
+    protected push(element: IJsonNode): void {
+        this.mStack.push(element);
+    }
+}
 
 interface IJsonNode {
 
@@ -96,11 +85,7 @@ class ObjectNode implements IJsonNode {
     }
 
     handle(value: any, builder: AbstractObjectBuilder): void {
-        // const fieldName = builder.fieldName;
-        // if (fieldName) {
-            this.value[builder.fieldName] = value;
-        //    builder.fieldName = undefined;
-        // }
+        this.value[builder.fieldName] = value;
     }
 }
 
