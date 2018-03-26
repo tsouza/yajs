@@ -21,4 +21,8 @@ export class Stack<E> {
     previousPeek(): E {
         return this.stack[this.size];
     }
+
+    hasPreviousPeek(): boolean {
+        return this.stack.length > this.size;
+    }
 }

@@ -9,16 +9,12 @@ export class StreamPosition extends YAJSPath {
     private hasOnlyArrayIndex = true;
 
     stepIntoObject() {
-        if (this.stack.length > this.size) {
-            const next = this.previousPeek();
-            if (next.getType() === PathOperator.Type.OBJECT) {
-                this.size++;
-                (next as ChildNode).key = undefined;
-                this.top = undefined;
-                return;
-            }
+        const previous = this.stepInto(PathOperator.Type.OBJECT);
+        if (previous) {
+            (previous as ChildNode).key = undefined;
+        } else {
+            this.push(new ChildNode());
         }
-        this.push(new ChildNode());
     }
 
     updateObjectEntry(key: string) {
@@ -30,15 +26,9 @@ export class StreamPosition extends YAJSPath {
     }
 
     stepIntoArray() {
-        if (this.stack.length > this.size) {
-            const next = this.previousPeek();
-            if (next.getType() === PathOperator.Type.ARRAY) {
-                this.size++;
-                this.top = undefined;
-                return;
-            }
+        if (!this.stepInto(PathOperator.Type.ARRAY)) {
+            this.push(new ArrayIndex());
         }
-        this.push(new ArrayIndex());
     }
 
     stepOutArray() {
@@ -66,5 +56,17 @@ export class StreamPosition extends YAJSPath {
             this.hasOnlyArrayIndex = true;
             this.rootIndex = pathDepth;
         }
+    }
+
+    private stepInto(type: PathOperator.Type): PathOperator {
+        if (this.hasPreviousPeek()) {
+            const previous = this.previousPeek();
+            if (previous.getType() === type) {
+                this.size++;
+                this.top = undefined;
+                return previous;
+            }
+        }
+        return null;
     }
 }

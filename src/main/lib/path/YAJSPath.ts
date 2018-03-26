@@ -11,11 +11,7 @@ import { ActionProjectContext, PathStepContext, YAJSParser } from './parser/YAJS
 import { PathOperator } from './PathOperator';
 import { PathParent } from './PathParent';
 
-export class YAJSPath/* extends Stack<PathOperator>*/ {
-
-    /* protected operators: PathOperator[];
-    protected size: number = 0;
-    protected top: PathOperator; */
+export class YAJSPath {
 
     private mProjectExpr: string;
     private mProjectKeys: string[];
@@ -26,8 +22,6 @@ export class YAJSPath/* extends Stack<PathOperator>*/ {
     private mStack = new Stack<PathOperator>();
 
     constructor(operators: PathOperator[] = [], projectExpression: string = '', projectKeys: string[] = []) {
-        // super();
-        // this.operators = [];
         this.mProjectExpr = projectExpression;
         this.mProjectKeys = projectKeys;
 
@@ -79,6 +73,10 @@ export class YAJSPath/* extends Stack<PathOperator>*/ {
 
     previousPeek(): PathOperator {
         return this.mStack.previousPeek();
+    }
+
+    hasPreviousPeek(): boolean {
+        return this.mStack.hasPreviousPeek();
     }
 
     match(jsonPath: YAJSPath): boolean {
@@ -145,11 +143,6 @@ export class YAJSPath/* extends Stack<PathOperator>*/ {
     get projectKeys(): string[] {
         return this.mProjectKeys;
     }
-
-    /* protected pop(): void {
-        this.size--;
-        this.top = undefined;
-    }*/
 }
 
 export namespace YAJSPath {
