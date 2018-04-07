@@ -6,3 +6,5 @@ before_script:
 node_js:
  - 'node'
  - '6'
+git:
+  submodules: false
