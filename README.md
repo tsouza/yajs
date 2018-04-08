@@ -12,6 +12,10 @@ The reason I built this tool is that I could not find a proper json stream proce
 
 There is a also a benchmark of this tool comparing with [oboe.js](https://github.com/jimhigson/oboe.js) and [JSONStream](https://github.com/dominictarr/JSONStream). See [benchmark](benchmark.md).
 
+## Documentation
+
+Head over to [Wiki](https://github.com/tsouza/yajs/wiki/Getting-Started) for more information on how to use it.
+
 ## Example
 
 Pipe a text stream of json into YAJS and select 'author' property:
@@ -107,7 +111,7 @@ $ cat test.json | yajs '$.object1{key1}'
 
 ## Bugs and Feedback
 
-For bugs, questions and discussions please use the [Github Issues](issues).
+For bugs, questions and discussions please use the [Github Issues](https://github.com/tsouza/yajs/issues).
 
 ## Acknowledgements
 
