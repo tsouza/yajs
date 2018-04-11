@@ -8,7 +8,7 @@ YAJS is a tool for filtering a portion of json files.
 
 ## Motivation
 
-The reason I built this tool is that I could not find a proper json stream processor with the features I needed without sacrificing speed and memory. 
+The reason I built this tool is that I could not find a proper json stream processor with the features I needed without sacrificing speed and memory.
 
 There is a also a benchmark of this tool comparing with [oboe.js](https://github.com/jimhigson/oboe.js) and [JSONStream](https://github.com/dominictarr/JSONStream). See [benchmark](benchmark.md).
 
