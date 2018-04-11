@@ -56,22 +56,22 @@ Library    | Completed |   Time   | Avg EPS | % Diff
 -----------|:---------:|:--------:|--------:|:-------:
 yajs       | Yes       | 16.627 s | 126.50K | -
 JSONStream | Yes       | 26.377 s | 78.21K  | 61.74%
-oboe.js    | Yes       | 46.965 s | 43.34K  | 191.85%
+oboe.js    | Yes       | 46.965 s | 43.34K  | 34.26%
 
 ### Dataset 2
 
   Library  | Completed |      Time      | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 13 m, 52.066 s | 12.03K  | -
-JSONStream | Yes       | 37 m, 55.946 s | 4.39K   | 173.68%
-oboe.js    | Yes       | 51 m, 56.755 s | 3.21K   | 74.81%
+JSONStream | Yes       | 37 m, 55.946 s | 4.39K   | 36.49%
+oboe.js    | Yes       | 51 m, 56.755 s | 3.21K   | 26.68%
 
 ### Dataset 3
 
   Library  | Completed |        Time    | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 20 m, 48.908 s | 12.02K  | -
-JSONStream | Yes       | 57 m, 33.585 s | 4.20K   | 176.66%
+JSONStream | Yes       | 57 m, 33.585 s | 4.20K   | 34.91%
 oboe.js    | No        | -              | -       | -
 
 ### Dataset 4
@@ -79,7 +79,7 @@ oboe.js    | No        | -              | -       | -
   Library  | Completed |      Time      | Avg EPS | % Diff
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 8 m, 31.11 s   | 548.68K | -
-JSONStream | Yes       | 51 m, 23.581 s | 90.82K  | 504.13%
+JSONStream | Yes       | 51 m, 23.581 s | 90.82K  | 16.55%
 oboe.js    | No        | -              | -       | -
 
 *NOTE: oboe.js did not complete due to out of memory error.*
