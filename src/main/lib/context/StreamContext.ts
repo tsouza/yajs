@@ -95,6 +95,8 @@ export class StreamContext {
                         this.path.projectExpression,
                         this.path.projectKeys);
 
+                    dispatcher.dropKeys = this.path.dropKeys;
+
                     if (this.dispatchers.length) {
                         this.dispatchers.push(dispatcher);
                     } else if (this.dispatcher) {

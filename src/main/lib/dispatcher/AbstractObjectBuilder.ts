@@ -1,32 +1,49 @@
 import { Stack } from '../utils/Stack';
 
-export abstract class AbstractObjectBuilder /*extends Stack<IJsonNode>*/ {
+export abstract class AbstractObjectBuilder {
 
     fieldName?: string;
     private mStack = new Stack<IJsonNode>();
+    private mDropKeys: any;
+    private mDrop;
 
     constructor() {
-        // super();
         this.push(new RootNode());
+    }
+
+    set dropKeys(dropKeys: string[]) {
+        this.mDropKeys = (dropKeys || []).reduce((obj, val) => {
+            obj[val] = true;
+            return obj;
+        }, {});
     }
 
     startObject(): void {
         const newObject = {};
-        this.peek().handle(newObject, this);
+        this.onValue(newObject);
         this.push(new ObjectNode(newObject));
     }
 
-   startObjectEntry(key: string): void {
+    startObjectEntry(key: string): void {
         this.fieldName = key;
+        if (this.mDropKeys[key] && this.mStack.size === 2) {
+            this.mDrop = true;
+        }
     }
 
     startArray(): void {
         const newArray = [];
-        this.peek().handle(newArray, this);
+        this.onValue(newArray);
         this.push(new ArrayNode(newArray));
     }
 
     onValue(value: any): void {
+        if (this.mDrop) {
+            if (this.mStack.size === 2) {
+                this.mDrop = false;
+            }
+            return;
+        }
         this.peek().handle(value, this);
     }
 
@@ -48,6 +65,9 @@ export abstract class AbstractObjectBuilder /*extends Stack<IJsonNode>*/ {
 
     protected pop(): void {
         this.mStack.pop();
+        if (this.mDrop && this.mStack.size === 2) {
+            this.mDrop = false;
+        }
     }
 
     protected push(element: IJsonNode): void {

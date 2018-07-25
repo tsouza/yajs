@@ -5,7 +5,7 @@ grammar YAJS;
 }
 
 path
-  : ROOT pathStep* (actionProject EOF)?
+  : ROOT pathStep* (pathLeaf EOF)?
   ;
 
 pathStep
@@ -21,8 +21,17 @@ actionFilter
   : LSB filterExpression RSB
   ;
 
+pathLeaf
+  : actionProject
+  | actionDropKeys
+  ;
+
 actionProject
   : LB filterExpression RB
+  ;
+
+actionDropKeys
+  : LT filterExpression GT
   ;
 
 filterExpression
@@ -40,16 +49,18 @@ LB   : '{' { this.expression = true;  };
 RB   : '}' { this.expression = false; };
 LSB  : '[' { this.expression = true;  };
 RSB  : ']' { this.expression = false; };
+LT   : '<' { this.expression = true; };
+GT   : '>' { this.expression = false; };
 
 Identifier
-  : ~('.'|'!'|' '|'\t'|'('|
-      ')'|'&'|'|'|'[' |']'|
+  : ~('.'|'!'|' '|'\t'|'('|'>'|
+      ')'|'&'|'|'|'[' |']'|'<'| 
       '{'|'}'|'$'|'*' )+ { this.expression === false; }?
   ;
 
 FilterExpressionTerm
-  : ~('!'|' '|'\t'|'('|
-      ')'|'&'|'|' |'['|
+  : ~('!'|' '|'\t'|'('|'>'|
+      ')'|'&'|'|' |'['|'<'|
       '{'|'}'|']')+ { this.expression === true; }?
   ;
 

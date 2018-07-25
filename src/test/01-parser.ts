@@ -52,8 +52,10 @@ describe('path parser', () => {
         const path = parser.path();
 
         // tslint:disable-next-line:no-unused-expression
-        expect(path.actionProject()).to.exist;
-        const projection = path.actionProject();
+        expect(path.pathLeaf()).to.exist;
+        // tslint:disable-next-line:no-unused-expression
+        expect(path.pathLeaf().actionProject()).to.exist;
+        const projection = path.pathLeaf().actionProject();
         if (projection) {
             expect(projection.filterExpression().text).to.equal('field1&&field2');
             const keys = extractKeys(projection.filterExpression());

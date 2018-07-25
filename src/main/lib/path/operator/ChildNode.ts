@@ -23,7 +23,7 @@ export class ChildNode extends AbstractFilteredOperator {
     }
 
     private matches(operator: PathOperator): boolean {
-        return operator.getType() === PathOperator.Type.ARRAY ||
-            this.key === (operator as any).key;
+        return (operator.getType() === PathOperator.Type.ARRAY ||
+            this.key === (operator as any).key);
     }
 }

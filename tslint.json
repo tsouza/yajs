@@ -11,6 +11,6 @@
     },
     "rulesDirectory": [],
     "linterOptions": {
-        "exclude": "src/lib/path/parser/*.ts"
+        "exclude": [ "src/main/lib/path/parser/*.ts" ]
     }
 }

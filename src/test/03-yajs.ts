@@ -36,7 +36,7 @@ describe('yajs', () => {
                 split('\n').filter((l) => l.length).
                 map((l) => JSON.parse(l)))]).
             spread((actual: any, expected: any[]) => {
-                expect(actual).to.lengthOf(3);
+                expect(actual).to.lengthOf(4);
                 actual.forEach((entry: any, idx: number) => {
                     // tslint:disable-next-line:no-unused-expression
                     expect(entry.path).to.be.empty;
@@ -80,6 +80,13 @@ describe('yajs', () => {
                         value: { prop1: 'value1', prop2: 'value2' }}));
                 }));
 
+    it('should drop keys', () =>
+        test('ndjson-drop', '$<nested1 num2 group1 prop1 object1 object3 object4 path1>').
+            then((array) => {
+                expect(array).to.be.lengthOf(2);
+                array.forEach((entry) => expect(entry).to.be.deep.equal({
+                    path: [], value: { num: [ 6, 1 ] } }));
+            }));
 });
 
 function test(json: string, path: string): Promise<any[]> {

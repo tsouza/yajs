@@ -7,7 +7,9 @@ import { PathContext } from './YAJSParser';
 import { PathStepContext } from './YAJSParser';
 import { ActionFieldContext } from './YAJSParser';
 import { ActionFilterContext } from './YAJSParser';
+import { PathLeafContext } from './YAJSParser';
 import { ActionProjectContext } from './YAJSParser';
+import { ActionDropKeysContext } from './YAJSParser';
 import { FilterExpressionContext } from './YAJSParser';
 import { FilterExpressionTermContext } from './YAJSParser';
 
@@ -49,11 +51,25 @@ export interface YAJSVisitor<Result> extends ParseTreeVisitor<Result> {
 	visitActionFilter?: (ctx: ActionFilterContext) => Result;
 
 	/**
+	 * Visit a parse tree produced by `YAJSParser.pathLeaf`.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	visitPathLeaf?: (ctx: PathLeafContext) => Result;
+
+	/**
 	 * Visit a parse tree produced by `YAJSParser.actionProject`.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
 	visitActionProject?: (ctx: ActionProjectContext) => Result;
+
+	/**
+	 * Visit a parse tree produced by `YAJSParser.actionDropKeys`.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	visitActionDropKeys?: (ctx: ActionDropKeysContext) => Result;
 
 	/**
 	 * Visit a parse tree produced by `YAJSParser.filterExpression`.

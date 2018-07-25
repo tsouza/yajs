@@ -7,7 +7,8 @@ import { Root } from './operator/Root';
 import { Wildcard } from './operator/Wildcard';
 import { buildArgsExpression, extractKeys } from './parser/utils';
 import { YAJSLexer } from './parser/YAJSLexer';
-import { ActionProjectContext, PathStepContext, YAJSParser } from './parser/YAJSParser';
+import { ActionDropKeysContext, ActionProjectContext,
+    PathStepContext, YAJSParser } from './parser/YAJSParser';
 import { PathOperator } from './PathOperator';
 import { PathParent } from './PathParent';
 
@@ -15,15 +16,18 @@ export class YAJSPath {
 
     private mProjectExpr: string;
     private mProjectKeys: string[];
+    private mDropKeys: string[];
 
     private mDefinite = true;
     private mMinimumDepth = 0;
 
     private mStack = new Stack<PathOperator>();
 
-    constructor(operators: PathOperator[] = [], projectExpression: string = '', projectKeys: string[] = []) {
+    constructor(operators: PathOperator[] = [], projectExpression: string = '', projectKeys: string[] = [],
+                dropKeys: string[] = []) {
         this.mProjectExpr = projectExpression;
         this.mProjectKeys = projectKeys;
+        this.mDropKeys = dropKeys;
 
         [ new Root() ].concat(operators).
             forEach((op) => this.push(op));
@@ -143,6 +147,10 @@ export class YAJSPath {
     get projectKeys(): string[] {
         return this.mProjectKeys;
     }
+
+    get dropKeys(): string[] {
+        return this.mDropKeys;
+    }
 }
 
 export namespace YAJSPath {
@@ -154,6 +162,7 @@ export namespace YAJSPath {
 
         private projectExpression: string;
         private projectKeys: string[];
+        private dropKeys: string[];
 
         addChild(key: string, filterExpression?: string, filterKeys?: string[]): Builder {
             this.operators.push(new ChildNode(key, filterExpression, filterKeys));
@@ -173,6 +182,11 @@ export namespace YAJSPath {
             return this;
         }
 
+        setDropKeys(dropKeys: string[]) {
+            this.dropKeys = dropKeys;
+            return this;
+        }
+
         setProjection(projectExpression: string, projectKeys: string[]): Builder {
             this.projectExpression = projectExpression;
             this.projectKeys = projectKeys;
@@ -182,7 +196,7 @@ export namespace YAJSPath {
         build(): YAJSPath {
             const operators = this.operators;
             this.operators = [];
-            return new YAJSPath(operators, this.projectExpression, this.projectKeys);
+            return new YAJSPath(operators, this.projectExpression, this.projectKeys, this.dropKeys);
         }
     }
 
@@ -235,6 +249,11 @@ export namespace YAJSPath {
             this.builder.setProjection(
                 buildArgsExpression(ctx.filterExpression()),
                 extractKeys(ctx.filterExpression()));
+            return this.builder;
+        }
+
+        visitActionDropKeys(ctx: ActionDropKeysContext): YAJSPath.Builder {
+            this.builder.setDropKeys(extractKeys(ctx.filterExpression()));
             return this.builder;
         }
 
