@@ -9,6 +9,7 @@ export class StreamPosition extends YAJSPath {
     private hasOnlyArrayIndex = true;
 
     stepIntoObject() {
+        this.increaseArrayIndex();
         const previous = this.stepInto(PathOperator.Type.OBJECT);
         if (previous) {
             (previous as ChildNode).key = undefined;
@@ -50,11 +51,22 @@ export class StreamPosition extends YAJSPath {
     }
 
     pop(): void {
+        const peek = this.peek();
+        if (peek && 'index' in peek) {
+            (peek as any).index = 0;
+        }
         super.pop();
         const pathDepth = this.pathDepth();
         if (pathDepth <= this.rootIndex) {
             this.hasOnlyArrayIndex = true;
             this.rootIndex = pathDepth;
+        }
+    }
+
+    increaseArrayIndex() {
+        const peek = this.peek();
+        if (peek && 'index' in peek) {
+            (peek as ArrayIndex).index++;
         }
     }
 

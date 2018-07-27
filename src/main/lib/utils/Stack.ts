@@ -13,7 +13,7 @@ export class Stack<E> {
         this.stack[this.size++] = this.top = element;
     }
 
-    pop(): void {
+    pop() {
         this.size--;
         this.top = undefined;
     }

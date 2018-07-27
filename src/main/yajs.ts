@@ -5,7 +5,9 @@ import { StreamContext } from './lib/context/StreamContext';
 import { YAJSPath } from './lib/path/YAJSPath';
 import { JsonSaxParser } from './lib/utils/JsonSaxParser';
 
-export default function yajs(path: string): Transform {
+export default function yajs(path: string, options = {
+    pathIncludeArrayIndex: false,
+}): Transform {
     let context;
     let parser;
     const stream = through(
@@ -17,7 +19,8 @@ export default function yajs(path: string): Transform {
 
     const yajsPath = YAJSPath.parse(path);
     context = new StreamContext(yajsPath,
-        (p, value) => stream.emit('data', { path: p, value }));
+        (p, value) => stream.emit('data', { path: p, value }),
+        options.pathIncludeArrayIndex);
 
     parser = createSaxParser(context, stream);
 

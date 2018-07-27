@@ -119,12 +119,14 @@ export class YAJSPath {
         return this.size;
     }
 
-    path(): string[] {
+    path(includeArrayIndex): string[] {
         const result = [];
         for (let i = 0; i < this.size; i++) {
             const op: any = this.stack[i];
             if (op.key) {
                 result.push(op.key);
+            } else if (includeArrayIndex && 'index' in op) {
+                result.push(op.index);
             }
         }
         return result;

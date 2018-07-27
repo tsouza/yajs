@@ -87,14 +87,29 @@ describe('yajs', () => {
                 array.forEach((entry) => expect(entry).to.be.deep.equal({
                     path: [], value: { num: [ 6, 1 ] } }));
             }));
+
+    it('should include array index in path', () =>
+        test('array-index', '$..path1', true).
+            then((array) => {
+                expect(array).to.be.lengthOf(3);
+                expect(array[0]).to.be.deep.equal({
+                    path: [ 'deep', 'nested', 'array', 1, 'path1' ],
+                    value: 1 });
+                expect(array[1]).to.be.deep.equal({
+                    path: [ 'deep', 'nested', 'array', 3, 'path1' ],
+                    value: 1 });
+                expect(array[2]).to.be.deep.equal({
+                    path: [ 'deep', 'nested', 'array', 4, 'path1' ],
+                    value: 1 });
+                }));
 });
 
-function test(json: string, path: string): Promise<any[]> {
+function test(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {
     const source = createReadStream(`${__dirname}/stream-tests/${json}.json`);
     return new Promise<any[]>((resolve, reject) => {
         const result: any[] = [];
         source.
-            pipe(yajs(path)).
+            pipe(yajs(path, { pathIncludeArrayIndex })).
             on('data', (data: any) => result.push(data)).
             on('end', () => resolve(result)).
             on('error', (err: Error) => reject(err));

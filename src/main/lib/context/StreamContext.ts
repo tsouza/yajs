@@ -15,11 +15,12 @@ export class StreamContext {
     private readonly onMatchListener: (value?: any) => void;
     private readonly onValueListener: (value: any) => any;
 
-    constructor(path: YAJSPath, onMatch: (path: string[], value?: any) => void) {
+    constructor(path: YAJSPath, onMatch: (path: string[], value?: any) => void,
+                pathIncludeArrayIndex: boolean) {
         this.path = path;
 
         this.onMatchListener = (value?: any) =>
-            onMatch(this.position.path(), value);
+            onMatch(this.position.path(pathIncludeArrayIndex), value);
 
         this.onValueListener = isEmpty(path.projectExpression) ?
             (value) => this.doOnValue(value) : (value) => value;
@@ -72,6 +73,7 @@ export class StreamContext {
     }
 
     onValue(value: any): void {
+        this.position.increaseArrayIndex();
         this.onValueListener(value);
         this.dispatch((dispatcher) => {
             dispatcher.onValue(value);
