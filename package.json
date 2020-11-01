@@ -22,6 +22,7 @@
     "url": "https://github.com/tsouza/yajs/issues"
   },
   "main": "dist/main/main.js",
+  "types": "dist/main/yajs.d.ts",
   "module": "dist/main/yajs.js",
   "bin": {
     "yajs": "dist/main/index.js"
@@ -60,6 +61,6 @@
     "mocha": "^4.1.0",
     "oboe": "^2.1.4",
     "ts-node": "^4.1.0",
-    "typescript": "^2.6.2"
+    "typescript": "^3.7.2"
   }
 }
