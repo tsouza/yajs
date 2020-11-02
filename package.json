@@ -51,7 +51,7 @@
     "chai": "^4.1.2",
     "del": "^3.0.0",
     "fast-stats": "0.0.3",
-    "gulp": "^3.9.1",
+    "gulp": "4.0.2",
     "gulp-babel": "^7.0.0",
     "gulp-copy": "^1.1.0",
     "gulp-file-copy": "0.0.1",
