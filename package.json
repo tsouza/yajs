@@ -22,6 +22,7 @@
     "url": "https://github.com/tsouza/yajs/issues"
   },
   "main": "dist/main/main.js",
+  "types": "dist/main/yajs.d.ts",
   "module": "dist/main/yajs.js",
   "bin": {
     "yajs": "dist/main/index.js"
@@ -41,7 +42,6 @@
     "@types/bluebird": "^3.5.19",
     "@types/chai": "^4.1.0",
     "@types/mocha": "^2.2.46",
-    "JSONStream": "^1.3.2",
     "antlr4ts-cli": "^0.4.0-alpha.4",
     "ascii-table": "0.0.9",
     "babel-cli": "^6.26.0",
@@ -50,16 +50,18 @@
     "chai": "^4.1.2",
     "del": "^3.0.0",
     "fast-stats": "0.0.3",
-    "gulp": "^3.9.1",
+    "gulp": "4.0.2",
     "gulp-babel": "^7.0.0",
     "gulp-copy": "^1.1.0",
     "gulp-file-copy": "0.0.1",
     "gulp-typescript": "^3.2.3",
     "humanize-duration": "^3.12.1",
+    "JSONStream": "^1.3.2",
     "measured": "^1.1.0",
+    "merge2": "^1.4.1",
     "mocha": "^4.1.0",
     "oboe": "^2.1.4",
     "ts-node": "^4.1.0",
-    "typescript": "^2.6.2"
+    "typescript": "^3.7.2"
   }
 }
