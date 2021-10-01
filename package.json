@@ -16,7 +16,7 @@
     "json",
     "stream"
   ],
-  "author": "Thiago Souza <thiago@elastic.co>",
+  "author": "Thiago Souza <tcostasouza@gmail.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/tsouza/yajs/issues"
