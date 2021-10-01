@@ -28,7 +28,7 @@ createReadStream('./package.json').
     pipe(yajs('$.author')).
     on('data', data => {
         console.log(data.path); // outputs [ 'author' ]
-        console.log(data.value); // outputs 'Thiago Souza <thiago@elastic.co>'
+        console.log(data.value); // outputs 'Thiago Souza <tcostasouza@gmail.com>'
     });
 ```
 
@@ -39,7 +39,7 @@ Call it from a shell:
 ```bash
 $ npm install -g yajson-stream
 $ cat package.json | yajs '$.author'
-"Thiago Souza <thiago@elastic.co>"
+"Thiago Souza <tcostasouza@gmail.com>"
 ```
 
 ## YAJS Selector Syntax
