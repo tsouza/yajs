@@ -72,7 +72,10 @@ export class StreamContext {
         this.dispatch((dispatcher) => dispatcher.endArray());
     }
 
-    onValue(value: any): void {
+	onValue(value: any): void {
+		if (this.isInRoot()) {
+            this.reset();
+        }
         this.position.increaseArrayIndex();
         this.onValueListener(value);
         this.dispatch((dispatcher) => {

@@ -1,7 +1,7 @@
 /* tslint-env mocha */
 
 import { all } from 'bluebird';
-import { expect } from 'chai';
+import { expect, assert } from 'chai';
 import { createReadStream } from 'fs';
 
 import yajs from '../main/yajs';
@@ -101,7 +101,43 @@ describe('yajs', () => {
                 expect(array[2]).to.be.deep.equal({
                     path: [ 'deep', 'nested', 'array', 4, 'path1' ],
                     value: 1 });
-                }));
+		}));
+	it('should return an nothing', () =>
+	   test('number', '$', false).
+		   then((array) => expect(array).to.be.lengthOf(0)));
+	it('should catch parsing error #1', () =>
+		 test('error-01', '$', false).
+			 then(() => Promise.reject(new Error('An error is the attempted behavior'))).
+			 catch((e) => { 
+			 expect(e).to.be.an('error');
+			 expect(e.message).to.be.equal('Unexpected "#" at position 0 in state START');
+			 return Promise.resolve();
+		 }));
+	it.skip('should catch parsing error #2', () =>
+		 test('error-02', '$', false).
+			 then(() => Promise.reject(new Error('An error is the attempted behavior'))).
+			 catch((e) => { 
+			 expect(e).to.be.an('error');
+			 expect(e.message).to.be.equal('Unexpected "a" at position 1 in state START');
+			 return Promise.resolve();
+		 }));
+	it('should catch parsing error #3', () =>
+		 test('error-03', '$', false).
+			 then(() => Promise.reject(new Error('An error is the attempted behavior'))).
+			 catch((e) => { 
+			 expect(e).to.be.an('error');
+			 expect(e.message).to.be.equal('Unexpected "a" at position 5 in state START');
+			 return Promise.resolve();
+		 }));
+	it('should catch parsing error #4', () =>
+		 test('error-04', '$', false).
+			 then(() => Promise.reject(new Error('An error is the attempted behavior'))).
+			 catch((e) => { 
+			 expect(e).to.be.an('error');
+			 expect(e.message).to.be.equal('Unexpected "." at position 7 in state NUMBER4');
+			 return Promise.resolve();
+		 }));
+
 });
 
 function test(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {
@@ -112,7 +148,7 @@ function test(json: string, path: string, pathIncludeArrayIndex = false): Promis
             pipe(yajs(path, { pathIncludeArrayIndex })).
             on('data', (data: any) => result.push(data)).
             on('end', () => resolve(result)).
-            on('error', (err: Error) => reject(err));
+			on('error', (err: Error) => reject(err));
     });
 }
 
