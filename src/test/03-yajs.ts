@@ -1,7 +1,7 @@
 /* tslint-env mocha */
 
 import { all } from 'bluebird';
-import { expect, assert } from 'chai';
+import { expect } from 'chai';
 import { createReadStream } from 'fs';
 
 import yajs from '../main/yajs';
@@ -148,7 +148,7 @@ function test(json: string, path: string, pathIncludeArrayIndex = false): Promis
             pipe(yajs(path, { pathIncludeArrayIndex })).
             on('data', (data: any) => result.push(data)).
             on('end', () => resolve(result)).
-			on('error', (err: Error) => reject(err));
+            on('error', (err: Error) => reject(err));
     });
 }
 
