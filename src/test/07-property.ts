@@ -85,24 +85,28 @@ const jsonValueArbitrary = fc.letrec<{ value: unknown }>((tie) => ({
 // never itself dispatched as a match - which is why this generator only
 // needs to keep a BARE array from being the document's outermost shape.
 //
-// Separately, a document whose entire content is exactly the two bytes `""`
-// (an empty string, and *nothing* else - no trailing newline, no wrapping
-// container) also cannot be parsed at all: it fails with "Unexpected end
-// of input stream", for both a single write and any chunking. Root cause,
-// in src/main/lib/utils/JsonSaxParser.ts: reading `""` first lands the
-// state machine in TDQSTR2 ("saw two quotes - is a third quote about to
-// start a triple-quoted string, or is this an empty string followed by
-// something else?"), which needs to peek at the *next* byte to decide.
-// When that next byte is available in the buffer (a real document always
-// has one - `,`, `}`, `]`, or whitespace follows any value that isn't the
-// very last thing in the stream) the lookahead resolves cleanly and empty
-// strings parse fine, as confirmed by `{"a":""}`, `["",""]`, and `""\n`
-// all round-tripping correctly. But when `""` is the last two bytes ever
-// written (true only when an empty string is the *entire* document, with
-// no wrapping array/object to supply a trailing bracket), that lookahead
-// byte never arrives, `finish()` finds the state machine parked in
-// TDQSTR2 instead of START, and reports a bogus truncation error on
-// perfectly valid, complete JSON. See the dedicated regression test below.
+// Fixed regression for GitHub issue #62: a document whose entire content
+// is exactly the two bytes `""` (an empty string, and *nothing* else - no
+// trailing newline, no wrapping container) used to fail to parse at all,
+// with "Unexpected end of input stream", for both a single write and any
+// chunking. Root cause, in src/main/lib/utils/JsonSaxParser.ts: reading
+// `""` first lands the state machine in TDQSTR2 ("saw two quotes - is a
+// third quote about to start a triple-quoted string, or is this an empty
+// string followed by something else?"), which needs to peek at the *next*
+// byte to decide. When that next byte is available in the buffer (a real
+// document always has one - `,`, `}`, `]`, or whitespace follows any value
+// that isn't the very last thing in the stream) the lookahead resolves
+// cleanly and empty strings parse fine, as confirmed by `{"a":""}`,
+// `["",""]`, and `""\n` all round-tripping correctly. But when `""` is the
+// last two bytes ever written (true only when an empty string is the
+// *entire* document, with no wrapping array/object to supply a trailing
+// bracket), that lookahead byte never arrived, and `finish()` used to have
+// no case for the TDQSTR2 state at all, so it fell straight through to the
+// generic "Unexpected end of input stream" error. Fixed by
+// flushPendingTdqLookahead() in JsonSaxParser.ts, called from finish():
+// once the stream has genuinely ended, no third quote can possibly still
+// be coming, so TDQSTR2 unambiguously resolves to a complete, empty,
+// ordinary string. See the dedicated regression test below.
 //
 // GitHub issue #12 (fixed): object keys colliding with an Object.prototype
 // property name (constructor, toString, valueOf, hasOwnProperty,
@@ -119,7 +123,7 @@ const jsonValueArbitrary = fc.letrec<{ value: unknown }>((tie) => ({
 const rootSafeValueArbitrary = fc.oneof(
     jsonPrimitive,
     fc.dictionary(jsonKeyArbitrary, jsonValueArbitrary, { maxKeys: 8 }),
-).filter((value) => value !== '');
+);
 
 const NUM_RUNS = 150;
 
@@ -166,17 +170,15 @@ describe('yajs property-based round-trip', () => {
     it('produces the same result regardless of how the input is chunked', () =>
         fc.assert(
             fc.asyncProperty(
-                // Filtered the same way as rootSafeValueArbitrary above (see the
-                // comment there): a document whose whole content is the literal
-                // empty string `""` can't be parsed at all - by yajs, in a
-                // single write, chunked or not - so it would fail this property
-                // for a reason that has nothing to do with chunking. Bare arrays
-                // stay allowed here, unlike rootSafeValueArbitrary: this property
-                // never compares against JSON.parse, only against yajs's own
-                // unchunked output, so it doesn't care that a root array gets
-                // element-streamed rather than reconstructed - only that
-                // chunking the input doesn't change that.
-                jsonValueArbitrary.filter((value) => value !== ''),
+                // Bare arrays stay allowed here, unlike rootSafeValueArbitrary:
+                // this property never compares against JSON.parse, only against
+                // yajs's own unchunked output, so it doesn't care that a root
+                // array gets element-streamed rather than reconstructed - only
+                // that chunking the input doesn't change that. (The `!== ''`
+                // filter this used to need alongside rootSafeValueArbitrary,
+                // for the now-fixed issue #62 empty-string-at-EOF gap, is gone
+                // - see the comment above rootSafeValueArbitrary.)
+                jsonValueArbitrary,
                 fc.array(fc.integer({ min: 1, max: 5 }), { minLength: 1, maxLength: 50 }),
                 async (value, chunkSizes) => {
                     const json = JSON.stringify(value);
@@ -201,15 +203,13 @@ describe('yajs property-based round-trip', () => {
         expect(actual[0].value).to.equal(0.3);
     });
 
-    // Tracked regression for the bug described above rootSafeValueArbitrary:
-    // a document that is nothing but an empty string can't be parsed at
-    // all (unrelated to the number-precision bug above - this one is the
-    // TDQSTR2 end-of-stream lookahead gap). `it.fails` here means this test
-    // staying green means the bug is still present; if it ever starts
-    // failing ("unexpectedly passed"), drop the `!== ''` filters on
-    // rootSafeValueArbitrary and the chunking property's arbitrary above,
-    // promote this to a normal `it`, and assert the success case instead.
-    it.fails('known bug: a document that is only an empty string ("") fails to parse', async () => {
+    // Fixed regression for GitHub issue #62 (see the comment above
+    // rootSafeValueArbitrary): a document that is nothing but an empty
+    // string used to fail to parse entirely (the TDQSTR2 end-of-stream
+    // lookahead gap). Promoted from the `it.fails` this used to be once
+    // finish() gained a case for TDQSTR2 (flushPendingTdqLookahead() in
+    // JsonSaxParser.ts).
+    it('correctly parses a document that is only an empty string ("")', async () => {
         const actual = await runYajs(Buffer.from('""'));
         expect(actual).to.deep.equal([{ path: [], value: '' }]);
     });

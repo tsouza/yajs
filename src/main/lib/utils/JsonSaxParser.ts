@@ -813,6 +813,53 @@ export class JsonSaxParser {
     }
   }
 
+  // Resolves the two TDQSTR states that only exist to hold one byte of
+  // lookahead for the `"""..."""` extension, once a genuine end of stream
+  // proves no further lookahead byte is ever coming. Mirrors
+  // flushPendingNumber() above: called from finish() only, never from the
+  // normal mid-stream parse() loop (both states there use `n = buffer[i]`
+  // to consult a real next byte instead).
+  //
+  // - TDQSTR2 ("saw `""` - is a third `"` about to start a triple-quoted
+  //   string, or is this a complete, empty, ordinary string?"): the
+  //   in-stream case (see `case TDQSTR2` in parse()) resolves this the
+  //   instant a non-`"` byte arrives, by treating it as "no third quote
+  //   showed up" - flush the empty string and reprocess that byte from
+  //   START. At true EOF no byte arrives at all, but the answer is the
+  //   same: no more bytes are *ever* coming, so no third quote can
+  //   possibly follow either. This is what issue #62 tracked - finish()
+  //   used to have no case for TDQSTR2 at all, so a bare `""` document
+  //   (or an NDJSON stream's last record being an empty string) fell
+  //   through to the generic "Unexpected end of input stream" error
+  //   below instead of resolving to the empty string it actually is.
+  // - TDQSTR6 ("saw the full closing `"""` of a triple-quoted string"):
+  //   unlike TDQSTR2, this one isn't actually ambiguous - all three
+  //   closing quotes already matched by the time this state is entered
+  //   (see `case TDQSTR3: case TDQSTR4: case TDQSTR5` above). The
+  //   in-stream `case TDQSTR6` doesn't even consult the next byte for
+  //   its own decision - it exists only so the flush happens on its own
+  //   loop iteration, needing a byte to be *present* to run, not to be
+  //   *examined*. A stream that ends exactly here (e.g. the bare
+  //   six-byte document `""""""`, empty content between the triple
+  //   quotes) has nothing left to trigger that iteration, so without
+  //   this case it would hit the same generic error as TDQSTR2 despite
+  //   being a fully-closed, valid token.
+  private flushPendingTdqLookahead(): void {
+    switch (this.state) {
+    case TDQSTR2:
+      this.callbacks.onString('');
+      this.str = undefined;
+      this.state = START;
+      break;
+    case TDQSTR6:
+      this.tdq = false;
+      this.callbacks.onString(this.str);
+      this.str = undefined;
+      this.state = START;
+      break;
+    }
+  }
+
   finish() {
     if (this.state === ERROR) {
       // The single onError for the actual failure was already emitted;
@@ -838,6 +885,7 @@ export class JsonSaxParser {
       }
     }
     this.flushPendingNumber();
+    this.flushPendingTdqLookahead();
     if (this.state !== START) {
       this.callbacks.onError(new Error('Unexpected end of input stream'));
       return;

@@ -109,17 +109,20 @@ const iFixtures = allFixtures.filter((f) => f.startsWith('i_'));
 // that used to be flagged here) now all pass through the generic loop below
 // like any other fixture.
 
-// A bare `""` at the very end of the stream (nothing after the second
-// quote) is misreported as truncated input. Root cause: the triple-double-
-// quote extension needs one byte of lookahead past `""` to tell an empty
-// string apart from the start of a `"""..."""` block (TDQSTR2), and
-// finish() - called once the source ends with no more lookahead coming -
-// has no case for TDQSTR2, so it falls through to the generic "Unexpected
-// end of input stream" error instead of resolving the ambiguity in favor
-// of "no third quote showed up, so it was just an empty string".
-const EMPTY_STRING_AT_EOF = new Set([
-    'y_structure_string_empty.json',
-]);
+// Formerly tracked here (GitHub issue #62): a bare `""` at the very end of
+// the stream (nothing after the second quote) used to be misreported as
+// truncated input. Root cause: the triple-double-quote extension needs one
+// byte of lookahead past `""` to tell an empty string apart from the start
+// of a `"""..."""` block (TDQSTR2), and finish() - called once the source
+// ends with no more lookahead coming - had no case for TDQSTR2, so it fell
+// through to the generic "Unexpected end of input stream" error instead of
+// resolving the ambiguity in favor of "no third quote showed up, so it was
+// just an empty string". Fixed by flushPendingTdqLookahead() in
+// JsonSaxParser.ts's finish(), which also resolves the analogous TDQSTR6
+// pending-flush state (a genuinely-closed `"""..."""` string ending exactly
+// at EOF, e.g. the bare document `""""""`), found while fixing this.
+// y_structure_string_empty.json now passes through the generic loop below
+// like any other fixture.
 
 // yajs's tokenizer used to never enforce the *grammar* between tokens -
 // only individual tokens were validated character-by-character. Nothing
@@ -187,9 +190,7 @@ const NO_EXTRA_OR_TRAILING_COMMA_ENFORCEMENT = new Set([
 // n_structure_end_array.json now correctly produces an 'error' event, so it
 // no longer needs an entry in KNOWN_N_GAPS.
 
-const KNOWN_Y_GAPS = new Map<string, Set<string>>([
-    ['bare "" at end of stream misreported as truncated', EMPTY_STRING_AT_EOF],
-]);
+const KNOWN_Y_GAPS = new Map<string, Set<string>>();
 
 const KNOWN_N_GAPS = new Map<string, Set<string>>([
     ['extra/trailing comma silently accepted', NO_EXTRA_OR_TRAILING_COMMA_ENFORCEMENT],
