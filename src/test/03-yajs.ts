@@ -1372,6 +1372,148 @@ describe('yajs', () => {
             }
         });
     });
+
+    // Regression tests for the streaming ancestor-key cache corruption
+    // (issue #34's cache): entries used to be retired lazily at slot reuse
+    // instead of eagerly when a slot's subtree closed, so a since-closed
+    // branch's key could first hide a genuinely-open shallower ancestor
+    // with the same key (false negative) and then, after a poisoned
+    // retirement removed the wrong entry, report a closed depth as still
+    // open (false positive). Content-dependent: only documents where the
+    // same key settles at a deeper depth first, then a shallower one, ever
+    // triggered it. See StreamPosition.pop()/clearAncestorKeyAt() and the
+    // match()-level unit tests in 02-path.ts.
+    describe('descendant matching stays correct after a same-key branch closes (ancestor-cache corruption)', () => {
+
+        it('finds a match under a shallower "k" after a deeper "k" branch closed (own repro: $..k..m)', () =>
+            testJson('{"a":{"b":{"k":{"z":1}}},"k":{"x":{"m":2}}}', '$..k..m').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([2]);
+            }));
+
+        it('still finds the same match without the poisoning sibling branch (control)', () =>
+            testJson('{"k":{"x":{"m":2}}}', '$..k..m').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([2]);
+            }));
+
+        it('does not spuriously match via the closed deeper "k" (false positive direction: $.k.x..k..m - no second "k" ever sits above "m")', () =>
+            testJson('{"a":{"b":{"k":{"z":1}}},"k":{"x":{"q":{"m":2}}}}', '$.k.x..k..m').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still rejects the same non-matching selector without the poisoning branch (control)', () =>
+            testJson('{"k":{"x":{"q":{"m":2}}}}', '$.k.x..k..m').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+    });
+
+    // Regression tests for the wildcard-over-array-valued-key fix: '$.*'
+    // (and any wildcard directly under a named prefix) used to drop an
+    // array-valued key entirely - the wildcard's only reading of the ARRAY
+    // position level consumed it as its own hop, mispairing everything
+    // above. A wildcard now also tries ChildNode's transparent-array
+    // reading (see YAJSPath.matchFrom()'s ARRAY-branch comment), so it
+    // reaches the key's elements exactly as '$.a', '$.*.*' and '$..*'
+    // already did. Match()-level unit tests in 02-path.ts.
+    describe('wildcard reaches an array-valued key\'s elements', () => {
+
+        it('streams an array-valued key\'s elements via $.* alongside its scalar/object siblings (own repro)', () =>
+            testJson('{"a":[{"x":1}],"b":5,"c":{"y":2}}', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([{ x: 1 }, 5, { y: 2 }]);
+            }));
+
+        it('streams a nested array-valued key\'s elements via $.b.* (own repro, matching $.b.a\'s behavior)', () =>
+            testJson('{"b":{"a":[1,2]}}', '$.b.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2]);
+            }));
+
+        it('streams the same elements via the named form $.b.a (consistency control)', () =>
+            testJson('{"b":{"a":[1,2]}}', '$.b.a').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2]);
+            }));
+
+        it('still streams a bare top-level array\'s elements via $.* (issue #20, must not regress)', () =>
+            testJson('[1,2,3]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+
+        it('still captures each object element whole via $.* over a top-level array (issue #28, must not regress)', () =>
+            testJson('[{"x":1},{"y":2}]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([{ x: 1 }, { y: 2 }]);
+            }));
+
+        it('still captures array elements of an array-valued key whole, without flattening (issue #14, must not regress)', () =>
+            testJson('{"a":[[1,2],[3,4]]}', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[1, 2], [3, 4]]);
+            }));
+
+        it('lets $.*.* also reach inside an array-valued key\'s elements (transparent-array reading, consistent with $..* below)', () =>
+            testJson('{"a":[{"x":1}]}', '$.*.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, { x: 1 }]);
+            }));
+
+        it('still reaches the same positions via $..* (must not regress, and pins the ordering $.*.* above mirrors)', () =>
+            testJson('{"a":[{"x":1}]}', '$..*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, { x: 1 }]);
+            }));
+
+        it('still lets $.*.* walk a top-level array of objects one hop at a time (issue #28, must not regress)', () =>
+            testJson('[{"a":1,"b":2},{"c":3}]', '$.*.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+    });
+
+    // Regression tests for the three paths that silently dropped a '[x]'
+    // filter (see 02-path.ts for the match()-level unit tests and the
+    // root-cause writeups in YAJSPath.matchFrom() and
+    // StreamPosition.nearestAncestorIndex()): a filtered ChildNode answered
+    // from the streaming ancestor cache by key alone, a filtered wildcard
+    // collapsed before '..' as if bare, and a filtered wildcard consuming
+    // an ARRAY level without its match() ever running. All three were
+    // false positives - each control shows its already-correct sibling
+    // path, and each satisfied-filter case guards against overcorrecting
+    // into a false negative.
+    describe('filters are enforced in descendant scans and over arrays', () => {
+
+        it('rejects a filtered descendant scan target whose filter key occurs nowhere (own repro: $..[x]a..b vs {"y":{"a":{"b":1}}})', () =>
+            testJson('{"y":{"a":{"b":1}}}', '$..[x]a..b').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still matches the filtered descendant scan target when the filter IS satisfied (control)', () =>
+            testJson('{"x":{"a":{"b":1}}}', '$..[x]a..b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1]);
+            }));
+
+        it('rejects a filtered wildcard before ".." whose filter key occurs nowhere (own repro: $.[x]*..b vs {"y":{"b":1}})', () =>
+            testJson('{"y":{"b":1}}', '$.[x]*..b').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still rejects the same shape without ".." (control: $.[x]*.b already rejected)', () =>
+            testJson('{"y":{"b":1}}', '$.[x]*.b').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still matches through a filtered wildcard before ".." when its filter IS satisfied (must not become a false negative)', () =>
+            testJson('{"x":{"y":{"q":{"b":1}}}}', '$.x.[x]*..b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1]);
+            }));
+
+        it('rejects a filtered wildcard over an array-valued key when its filter key occurs nowhere (own repro: $.a.[q]*.b vs {"a":[{"b":1}]})', () =>
+            testJson('{"a":[{"b":1}]}', '$.a.[q]*.b').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still rejects the same filter against an object-valued key (control: enforcement no longer depends on container type)', () =>
+            testJson('{"a":{"e":{"b":1}}}', '$.a.[q]*.b').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still matches a filtered wildcard over an array-valued key when its filter IS satisfied (must not become a false negative)', () =>
+            testJson('{"a":[{"b":1}]}', '$.a.[a]*.b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1]);
+            }));
+    });
 });
 
 function test(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {

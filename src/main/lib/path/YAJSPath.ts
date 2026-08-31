@@ -127,24 +127,29 @@ export class YAJSPath {
 
             if (o1Type === PathOperator.Type.DESCENDANT) {
                 let prevScan = this.stack[pointer1--];
-                // Issue #39: Wildcard.match() and Descendant.match() are
-                // both unconditionally true (see their own match()), so
-                // neither one ever actually constrains "how far back" this
-                // scan needs to reach - the scan below stops at the very
-                // first candidate it examines once prevScan is satisfied,
-                // which for a non-selective prevScan is *always* the very
-                // next position level, silently capping '..' at exactly one
-                // hop whenever it's immediately preceded by a bare wildcard
-                // or another descendant (`$.*..*` repro), unlike every other
-                // '..' composition, which reaches arbitrary depth. The
-                // operator that actually constrains the scan is always the
-                // next SELECTIVE one further back in the pattern - a real
-                // key, or Root itself, and Root is always eventually reached
-                // this way since pattern[0] is always Root (the YAJSPath
-                // constructor guarantees it) - so collapse through every
-                // non-selective operator first and scan for that instead.
-                // ('$.*..*' and '$..*..*' both reduce to "scan for Root"
-                // this way, exactly like a plain '$..a' already does.)
+                // Issue #39: a BARE Wildcard's match() and Descendant's
+                // match() are both unconditionally true (see their own
+                // match()), so neither one ever actually constrains "how
+                // far back" this scan needs to reach - the scan below stops
+                // at the very first candidate it examines once prevScan is
+                // satisfied, which for a non-selective prevScan is *always*
+                // the very next position level, silently capping '..' at
+                // exactly one hop whenever it's immediately preceded by a
+                // bare wildcard or another descendant (`$.*..*` repro),
+                // unlike every other '..' composition, which reaches
+                // arbitrary depth. The operator that actually constrains
+                // the scan is always the next SELECTIVE one further back in
+                // the pattern - a real key, a FILTERED wildcard ('[x]*',
+                // whose match() is NOT unconditional: it evaluates its
+                // filter against the candidate, so collapsing it as if bare
+                // would silently discard the filter - see its `filtered`
+                // check below), or Root itself, and Root is always
+                // eventually reached this way since pattern[0] is always
+                // Root (the YAJSPath constructor guarantees it) - so
+                // collapse through every non-selective operator first and
+                // scan for that instead. ('$.*..*' and '$..*..*' both
+                // reduce to "scan for Root" this way, exactly like a plain
+                // '$..a' already does.)
                 //
                 // Each collapsed WILDCARD, unlike DESCENDANT, still owes its
                 // OWN single mandatory hop of real position depth (Wildcard
@@ -161,7 +166,8 @@ export class YAJSPath {
                 // below.
                 let mandatoryHops = 0;
                 while (pointer1 >= 0 &&
-                    (prevScan.getType() === PathOperator.Type.WILDCARD ||
+                    ((prevScan.getType() === PathOperator.Type.WILDCARD &&
+                        !(prevScan as Wildcard).filtered) ||
                         prevScan.getType() === PathOperator.Type.DESCENDANT)) {
                     if (prevScan.getType() === PathOperator.Type.WILDCARD) {
                         mandatoryHops++;
@@ -274,23 +280,56 @@ export class YAJSPath {
                 // retry to find the genuine Root beneath; ChildNode.match()
                 // treats an immediate Array as a provisional pass (see
                 // ChildNode.matches()) pending the real key check beneath.
-                // Wildcard is different: its match() is UNCONDITIONALLY
-                // true (issue #20) - matching this array already IS its
-                // final, fully-resolved verdict, with no more specific
-                // check deferred to beneath it. Retrying it anyway would
-                // let that unconditional "true" also silently swallow
-                // whatever position level sits just beneath the array -
-                // most critically the document's own Root, which the
-                // pattern's OWN trailing Root operator still separately
-                // needs to pair against (that pairing is what a bare '$'
-                // relies on to close out the match one iteration later) -
-                // e.g. for '$.*' against a bare top-level array ([1,2,3]),
-                // retrying Wildcard would have it also "match" Root,
-                // leaving pattern's Root with nothing left in the position
-                // stack to pair against and the whole match falsely failing.
-                if (o1Type !== PathOperator.Type.WILDCARD) {
-                    pointer1++;
+                //
+                // Wildcard is genuinely AMBIGUOUS here, and needs to try
+                // BOTH readings (backtracking via recursion, cheapest/most
+                // common first), because either one can be the only correct
+                // pairing depending on what the pattern above must line up
+                // with:
+                //
+                //  (a) CONSUME: the array level itself is the wildcard's
+                //      one hop - the "elements of" position. This is how
+                //      '$.*' matches a bare top-level array's elements
+                //      ([1,2,3] - issue #20; the wildcard MUST stop here,
+                //      because the level beneath is the document's own
+                //      Root, which the pattern's trailing Root operator
+                //      still separately needs to pair against), and how
+                //      '$.arr.*' reaches {"arr":[1,2,3]}'s elements. The
+                //      o1.match(o2) guard is the wildcard's filter check
+                //      (a bare wildcard's match() is unconditionally true,
+                //      so this only ever rejects for a '[x]*' whose filter
+                //      fails against the array's ancestors) - without it, a
+                //      filtered wildcard consuming an array level was the
+                //      one pairing where its filter was never evaluated at
+                //      all, making filter enforcement depend on the matched
+                //      value's container type.
+                //
+                //  (b) RETRY: the array is transparent scaffolding for the
+                //      key above it - exactly ChildNode's own rule - and
+                //      the wildcard's real hop is that key beneath. This is
+                //      how '$.*' reaches an array-valued key's elements at
+                //      all ({"a":[{"x":1}]}: the element's position is
+                //      Root->a->ARRAY, so consuming the ARRAY as the hop
+                //      (a) leaves the pattern's Root mispaired against the
+                //      key "a" and the whole match falsely failing - the
+                //      key vanished from '$.*' output entirely), mirroring
+                //      how '$.a' (array transparency) and '$..*'/'$.*.*'
+                //      already reach those same elements.
+                //
+                // Trying (a) alone (as this branch once did, reasoning only
+                // about the bare-top-level-array case) silently dropped
+                // every (b)-shaped match; trying (b) alone would break (a)'s
+                // bare-array case. Note the consecutive-array guard above
+                // already returned false before this point when the array
+                // run is deeper than one level (issue #14's whole-element
+                // capture) - neither alternative may reach past it.
+                if (o1Type === PathOperator.Type.WILDCARD) {
+                    if (o1.match(o2) && this.matchFrom(jsonPath, pointer1, pointer2)) {
+                        return true;
+                    }
+                    return this.matchFrom(jsonPath, pointer1 + 1, pointer2);
                 }
+                pointer1++;
             } else if (o1Type === PathOperator.Type.WILDCARD &&
                 pointer2 >= 0 && jsonPath.stack[pointer2].getType() === PathOperator.Type.ARRAY &&
                 pointer1 >= 0 && this.stack[pointer1].getType() !== PathOperator.Type.WILDCARD &&

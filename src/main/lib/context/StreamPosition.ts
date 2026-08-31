@@ -20,12 +20,17 @@ export class StreamPosition extends YAJSPath {
     // updateObjectEntry()) at position-stack index i, or undefined if index
     // i isn't currently a keyed ChildNode (e.g. it's an ArrayIndex, or an
     // object whose first key hasn't arrived yet). mKeyDepthStacks maps each
-    // such key to the (strictly increasing, since deeper indices are always
-    // recorded later) indices where it's *currently* the settled key -
-    // i.e. a real, presently-open ancestor, not a stale leftover from a
-    // since-closed/reused slot; see clearAncestorKeyAt(). "Nearest ancestor
-    // with key K at or before index F" is then just "largest recorded
-    // index <= F", found by binary search instead of a linear walk.
+    // such key to the indices where it's *currently* the settled key - i.e.
+    // a real, presently-open ancestor, never a stale leftover from a
+    // since-closed slot: pop() eagerly retires the popped slot's entry the
+    // moment the slot closes (see clearAncestorKeyAt()), so every recorded
+    // index is < the current depth, and each key's index list is strictly
+    // increasing (an entry can only be recorded at the current top slot,
+    // and any deeper entry for the same key must have been popped - and so
+    // retired - before the stack could have shrunk back and regrown to
+    // record a shallower one). "Nearest ancestor with key K at or before
+    // index F" is then just "largest recorded index <= F", found by binary
+    // search instead of a linear walk.
     //
     // trackAncestorKeys gates all of this bookkeeping off entirely (a plain
     // no-op on every call) whenever the path being matched has no '..' at
@@ -125,14 +130,16 @@ export class StreamPosition extends YAJSPath {
         // idx) - this just caches that value for stepOutObject()/
         // updateObjectEntry() to truncate back to later.
         this.mSegmentBaseline[idx] = this.mSegments.length;
-        if (this.trackAncestorKeys) {
-            // A reused slot (the `previous` branch above) may still carry a
-            // stale cache entry from whatever key last occupied it - clear
-            // it now (before any match attempt can see it) rather than only
-            // ever clearing lazily inside updateObjectEntry(), since this
-            // new object is genuinely keyless until its first key arrives.
-            this.clearAncestorKeyAt(idx);
-        }
+        // No ancestor-key cache maintenance is needed here: pop() retires a
+        // slot's cache entry eagerly the moment the slot closes, so a
+        // (re-)entered slot - which can only be re-entered after the depth
+        // shrank past it, i.e. after it was popped - is always already
+        // clean. Retiring lazily at reuse instead (as this method once did)
+        // was outright wrong, not just redundant: a stale entry surviving
+        // its slot's close could be popped from mKeyDepthStacks *after* the
+        // same key was legitimately re-recorded at a shallower index,
+        // making clearAncestorKeyAt()'s depths.pop() retire the live
+        // shallow entry and leave the stale deep one poisoning the cache.
     }
 
     updateObjectEntry(key: string) {
@@ -194,13 +201,9 @@ export class StreamPosition extends YAJSPath {
         // right now already equals this idx's correct baseline; cache it
         // for stepOutArray()/increaseArrayIndex() to truncate back to.
         this.mSegmentBaseline[idx] = this.mSegments.length;
-        if (this.trackAncestorKeys) {
-            // Same reasoning as stepIntoObject(): a reused (or, in
-            // principle, otherwise stale) slot at this index must not keep
-            // masquerading as whatever key last occupied it - an ArrayIndex
-            // position is never itself keyed.
-            this.clearAncestorKeyAt(idx);
-        }
+        // No ancestor-key cache maintenance needed - same reasoning as
+        // stepIntoObject(): pop() already retired whatever entry this slot
+        // last held, and an ArrayIndex position is never itself keyed.
     }
 
     stepOutArray() {
@@ -235,6 +238,18 @@ export class StreamPosition extends YAJSPath {
     }
 
     pop(): void {
+        if (this.trackAncestorKeys) {
+            // Retire the closing slot's ancestor-key cache entry EAGERLY,
+            // right as the slot closes - the popped slot's key is no longer
+            // an open ancestor of anything, so its entry must not survive
+            // to be consulted (or, worse, mis-retired later - see
+            // stepIntoObject()) once the slot is gone. This is the sole
+            // point where entries are retired for a closing slot, and -
+            // together with updateObjectEntry()'s same-slot key
+            // replacement - what maintains the strictly-increasing/LIFO
+            // invariant clearAncestorKeyAt() relies on.
+            this.clearAncestorKeyAt(this.pathDepth() - 1);
+        }
         const peek = this.peek();
         if (peek && 'index' in peek) {
             // Issue #60: must match ArrayIndex's own constructor (-1), not 0
@@ -296,9 +311,10 @@ export class StreamPosition extends YAJSPath {
     // Issue #34: O(log depth) override of YAJSPath's O(depth) linear-scan
     // fallback, backed by mAncestorKeys/mKeyDepthStacks (see their field
     // comments). A '..' scan's target (YAJSPath.match()'s `prevScan`, after
-    // its own collapsing through non-selective WILDCARD/DESCENDANT
-    // operators - see issue #39) is always either Root or a real keyed
-    // ChildNode by the time it reaches here.
+    // its own collapsing through non-selective bare-WILDCARD/DESCENDANT
+    // operators - see issue #39) is always Root, a real keyed ChildNode, or
+    // a FILTERED Wildcard (which the collapse deliberately stops at - its
+    // match() is not unconditional) by the time it reaches here.
     nearestAncestorIndex(target: PathOperator, fromIndex: number): number {
         if (target.getType() === PathOperator.Type.ROOT) {
             // Every position starts with exactly one Root operator, always
@@ -316,7 +332,15 @@ export class StreamPosition extends YAJSPath {
         // its field comment) - correct either way, just without the O(log
         // depth) speed-up, which is only actually needed for a '..'-
         // containing path in the first place.
-        if (this.trackAncestorKeys && target.getType() === PathOperator.Type.OBJECT) {
+        //
+        // Also falls back for a FILTERED target (a '[x]key' ChildNode, or a
+        // filtered Wildcard, which never takes the cache path anyway): the
+        // cache indexes ancestors by key alone, so answering a filtered
+        // target from it would silently skip the target.match() filter
+        // evaluation the base scan performs on every candidate - accepting
+        // an ancestor whose key matches but whose filter doesn't.
+        if (this.trackAncestorKeys && target.getType() === PathOperator.Type.OBJECT &&
+                !(target as ChildNode).filtered) {
             const depths = this.mKeyDepthStacks.get((target as ChildNode).key);
             return depths ? StreamPosition.largestAtMost(depths, fromIndex) : -1;
         }
@@ -355,24 +379,27 @@ export class StreamPosition extends YAJSPath {
         this.mSegments.length = this.mSegmentBaseline[idx];
     }
 
-    // Retires index idx's cache entry (if any) before it's about to be
-    // reused for something else (a fresh/reused ChildNode or ArrayIndex
-    // slot at that same position-stack depth) or overwritten with a new
-    // key (a later key of the same still-open object). Must run before any
-    // match attempt can observe the new occupant, otherwise a stale entry
-    // would let a since-closed (or since-renamed) ancestor's key keep
-    // masquerading as a currently-open one.
+    // Retires index idx's cache entry (if any). Called from exactly two
+    // places, both with idx as the CURRENT topmost position-stack index:
+    // pop(), as the slot at idx closes, and updateObjectEntry(), as a new
+    // key replaces whatever the still-open slot at idx last held. Retiring
+    // eagerly on pop() (rather than lazily when the slot is later reused)
+    // is load-bearing, not just tidiness - see pop() and stepIntoObject().
     private clearAncestorKeyAt(idx: number): void {
         const staleKey = this.mAncestorKeys[idx];
         if (staleKey === undefined) {
             return;
         }
         const depths = this.mKeyDepthStacks.get(staleKey);
-        // LIFO invariant: position-stack indices are always recorded here
-        // in strictly increasing order as we descend, and can only be
-        // retired in the reverse (deepest-first) order they were recorded
-        // - so idx, once it's the one being retired, is always depths'
-        // topmost/last entry.
+        // LIFO invariant: entries are only ever recorded at the topmost
+        // index (updateObjectEntry()), and only ever retired at the topmost
+        // index (see above) - so at retirement time idx is >= every
+        // recorded index of every key, and in particular is always depths'
+        // own largest/last entry. This held only vacuously before pop()
+        // retired eagerly: a stale entry surviving its slot's close could
+        // sit ABOVE a later, shallower entry for the same key, and this
+        // depths.pop() would then retire the live shallow entry instead
+        // (the ancestor-cache corruption bug).
         depths.pop();
         if (depths.length === 0) {
             this.mKeyDepthStacks.delete(staleKey);
