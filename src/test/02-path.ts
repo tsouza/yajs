@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ArrayIndex } from '../main/lib/path/operator/ArrayIndex';
+import { ChildNode } from '../main/lib/path/operator/ChildNode';
 import { YAJSPath } from '../main/lib/path/YAJSPath';
 
 describe('path match', () => {
@@ -138,6 +139,194 @@ describe('path match', () => {
             position.push(new ArrayIndex());
 
             expect(pattern.match(position)).to.equal(false);
+        });
+    });
+
+    // Regression tests for GitHub issue #27: YAJSPath.match()'s DESCENDANT
+    // branch scans backward through the position stack, using the pattern
+    // operator preceding '..' (prevScan) to find the ancestor it should
+    // resume matching from. That scan used to test prevScan.match(o2)
+    // directly against every ancestor position, including ARRAY-typed ones
+    // - but ChildNode.match()/Wildcard.match() both unconditionally return
+    // true against an ARRAY-typed operand (the single-hop "array is
+    // transparent for its parent key" rule used elsewhere in match()),
+    // which made the scan stop at the first array it met regardless of
+    // whether the sought ancestor was actually there: a false negative when
+    // the real match lay further back past the array, and a false positive
+    // when an unrelated array let the scan "find" an ancestor that was
+    // never a genuine match. Fixed by always skipping ARRAY-typed positions
+    // in this scan, unconditionally, and only ever testing prevScan.match()
+    // against a real (non-ARRAY) ancestor.
+    describe('descendant scan through arrays (issue #27)', () => {
+
+        it('finds a descendant match past a single intervening array preceded by a named key (false negative repro: $.a..b vs {"a":[{"b":2}]})', () => {
+            const pattern = YAJSPath.parse('$.a..b');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('b'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('finds a descendant match past a single intervening array preceded by a wildcard, not just a named key ($.*..b vs {"a":[{"b":2}]})', () => {
+            const pattern = YAJSPath.parse('$.*..b');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('b'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('finds a descendant match past an array in a longer chain ($.a.b..c vs {"a":{"b":[{"c":5}]}})', () => {
+            const pattern = YAJSPath.parse('$.a.b..c');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('b').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('c'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('finds a descendant match past TWO consecutive intervening arrays (adversarial - not just one)', () => {
+            const pattern = YAJSPath.parse('$.a..c');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('c'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('does not spuriously match through an array when the sought ancestor key never occurs anywhere (false positive repro: $..x..y vs {"foo":{"bar":[{"y":"oops"}]}})', () => {
+            const pattern = YAJSPath.parse('$..x..y');
+
+            const position = new YAJSPath.Builder().
+                addChild('foo').
+                addChild('bar').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('y'));
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still matches a plain descendant scan with no arrays involved at all (regression guard)', () => {
+            const pattern = YAJSPath.parse('$.a..b');
+            const position = YAJSPath.parse('$.a.y.b');
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+    });
+
+    // Regression tests for GitHub issue #28: once YAJSPath.match()'s
+    // array-transparency loop let a pattern's Wildcard pass one array
+    // boundary, Wildcard.match() being unconditionally true (issue #20)
+    // meant it would also silently accept a FURTHER, deeper position level
+    // that was really nested one level INSIDE the array's element - i.e. a
+    // property of the element, not the element itself - letting '$.*'
+    // reach past an array of objects into their own field values as
+    // spurious extra matches (and, worse, letting a second concurrent
+    // dispatcher hijack events meant for the real element match, corrupting
+    // it). Fixed by rejecting a Wildcard's pairing against a non-ARRAY
+    // position whose immediate parent position IS an ARRAY, unless the
+    // pattern operator that will take responsibility for that array (the
+    // one immediately preceding this Wildcard) is itself a WILDCARD or a
+    // DESCENDANT - both of which are specifically designed to tolerate
+    // exactly that (see YAJSPath.match() for the full reasoning).
+    describe('wildcard leak through array elements (issue #28)', () => {
+
+        it('does not let a wildcard reach past an array element into one of its own properties (repro: $.* vs [{"x":1,"y":2}])', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('x'));
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still matches the array element itself as a whole (must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('does not leak when the array-nested property\'s own value is itself an array, not just an object (repro variant: $.* vs [{"x":[1,2]}])', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('x'));
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('does not leak three levels deep (adversarial: $.* vs [{"x":{"deep":1}}]\'s "deep" position)', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('x'));
+            position.push(new ChildNode('deep'));
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still lets a chain of wildcards reach one hop at a time through an array ($.*.* must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('x'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still lets a descendant-wildcard reach an array-nested property ($..* must not regress)', () => {
+            const pattern = YAJSPath.parse('$..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('x'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still matches a named key inside array elements via $.*.b (issue #20, must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*.b');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('b'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still matches a flat top-level array of scalars via $.* (issue #20, must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
         });
     });
 
@@ -286,6 +475,64 @@ describe('path match', () => {
             'required EOF before issue #19\'s fix)', () => {
             expect(() => YAJSPath.parse('$.a{b}')).to.not.throw();
             expect(() => YAJSPath.parse('$.a<b>')).to.not.throw();
+        });
+    });
+
+    // Regression tests for GitHub issue #29: drop-keys (`<...>`) shares the
+    // same filterExpression grammar rule as project (`{...}`) and filter
+    // (`[...]`), so `&&`/`||`/`!`/parens all parsed without error there too
+    // - but Visitor.visitActionDropKeys only ever called extractKeys(),
+    // which flattens every leaf key token into a plain list regardless of
+    // the boolean structure around them, so e.g. `<key1 && key2>` and
+    // `<!key1>` silently behaved exactly like the plain flat list
+    // `<key1 key2>` (every named key always dropped unconditionally), with
+    // no error or indication the operators had no effect. Rather than give
+    // these an ambiguous boolean meaning (dropping is inherently per-key,
+    // unlike project/filter's single true/false gate), YAJSPath.parse() now
+    // rejects any drop-keys expression that isn't a flat, space-separated
+    // list of bare key names - consistent with how issues #18/#19 made
+    // other malformed selectors fail cleanly instead of misbehaving
+    // silently.
+    describe('drop-keys with boolean operators (issue #29)', () => {
+
+        it('still accepts a flat, space-separated key list (must not regress)', () => {
+            expect(() => YAJSPath.parse('$<key1 key2>')).to.not.throw();
+            expect(YAJSPath.parse('$<key1 key2>').dropKeys).to.deep.equal([ 'key1', 'key2' ]);
+        });
+
+        it('still accepts a single bare drop key (must not regress)', () => {
+            expect(YAJSPath.parse('$<key1>').dropKeys).to.deep.equal([ 'key1' ]);
+        });
+
+        it('throws for an explicit && between drop keys, instead of silently ' +
+            'dropping both unconditionally as if it had no effect', () => {
+            expect(() => YAJSPath.parse('$<key1 && key2>')).to.throw(/boolean operators/);
+        });
+
+        it('throws for an explicit || between drop keys', () => {
+            expect(() => YAJSPath.parse('$<key1 || key2>')).to.throw(/boolean operators/);
+        });
+
+        it('throws for a NOT-prefixed drop key, instead of silently dropping ' +
+            'it exactly as if the `!` were absent', () => {
+            expect(() => YAJSPath.parse('$<!key1>')).to.throw(/boolean operators/);
+        });
+
+        it('throws for a parenthesized drop-keys group', () => {
+            expect(() => YAJSPath.parse('$<(key1)>')).to.throw(/boolean operators/);
+        });
+
+        it('throws for a mix of boolean operators among otherwise-flat keys', () => {
+            expect(() => YAJSPath.parse('$<key1 key2 && key3>')).to.throw(/boolean operators/);
+        });
+
+        it('does not affect project ({...}) syntax, which still accepts boolean operators', () => {
+            expect(() => YAJSPath.parse('$.a{key1 && key2}')).to.not.throw();
+            expect(() => YAJSPath.parse('$.a{!key1}')).to.not.throw();
+        });
+
+        it('does not affect filter ([...]) syntax, which still accepts boolean operators', () => {
+            expect(() => YAJSPath.parse('$..[key1 && key2]b')).to.not.throw();
         });
     });
 
