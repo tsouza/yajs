@@ -8,6 +8,12 @@ export class StreamContext {
 
     private position: StreamPosition;
     private readonly path: YAJSPath;
+    // Issue #44: saved (rather than only living in onMatchListener's own
+    // closure, as before) because it must also be threaded into every
+    // `new StreamPosition(...)` call below - StreamPosition now bakes this
+    // flag in at construction time instead of taking it per path() call
+    // (see StreamPosition's own field comment for why).
+    private readonly pathIncludeArrayIndex: boolean;
 
     // this.dispatcher is the currently *active* dispatcher (the one that
     // receives every forwarded startObject/startArray/startObjectEntry/
@@ -61,6 +67,7 @@ export class StreamContext {
                 pathIncludeArrayIndex: boolean, onError: (err: Error) => void = (err) => { throw err; }) {
         this.path = path;
         this.onErrorListener = onError;
+        this.pathIncludeArrayIndex = pathIncludeArrayIndex;
 
         this.onMatchListener = (value?: any) =>
             onMatch(this.position.path(pathIncludeArrayIndex), value);
@@ -78,7 +85,7 @@ export class StreamContext {
         // cheap as before this fix. See the identical StreamPosition
         // construction in startArray() below for the other spot a fresh
         // position gets created.
-        this.position = new StreamPosition(!this.path.definite);
+        this.position = new StreamPosition(this.pathIncludeArrayIndex, !this.path.definite);
         this.match(value);
     }
 
@@ -145,7 +152,7 @@ export class StreamContext {
             //
             // See reset() above for why the constructor argument here isn't
             // always true (issue #34).
-            this.position = new StreamPosition(!this.path.definite);
+            this.position = new StreamPosition(this.pathIncludeArrayIndex, !this.path.definite);
        } else if (this.position.peek().getType() === PathOperator.Type.ARRAY) {
             // Still within an already-open array's elements slot (see
             // StreamPosition's arrayIndexDepth): this array-open IS one of
