@@ -196,6 +196,73 @@ describe('NDJSON resyncs after a malformed record instead of dropping ' +
     }, 2000);
 });
 
+// Regression tests for https://github.com/tsouza/yajs/issues/56 ("bare
+// top-level NDJSON string is lost when immediately followed by a record
+// that errors mid-string").
+//
+// A completed top-level string value is buffered in yajs.ts's `strValue`
+// until something disambiguates it from a possible (still-pending) object
+// *key* - see flushPendingString() there. Every disambiguation point had a
+// callback to flush it EXCEPT one: the whitespace-driven NDJSON record
+// boundary (`AWAIT_DOC_AFTER_VALUE` -> `AWAIT_DOC_VALUE` in
+// JsonSaxParser.ts, on seeing whitespace after a just-completed top-level
+// value). Without a flush there, a bare string immediately followed - across
+// just a newline, no comma - by a different kind of next record lost the
+// string entirely: either silently discarded (onNumber/onBoolean/onNull/
+// onStartArray/onStartObject all reset `strValue = null` without flushing)
+// or, if that next record itself errors, made permanently unflushable by
+// flushPendingString()'s own `!state.errored` guard - even though that
+// guard exists to protect a string belonging to the record that is actually
+// failing, not one from an earlier, already-complete record. Confirmed
+// present on master before the NDJSON resync fix (PR #55/issue #50) too -
+// pre-existing, not a resync regression. Fixed by adding JsonSaxParser's
+// `onValueBoundary` callback, fired at exactly that whitespace-confirmed
+// boundary, before any byte of the next record is parsed.
+describe('bare top-level NDJSON string is not lost by a following record ' +
+    '(issue #56)', () => {
+
+    it('should still deliver a bare top-level string whose following ' +
+        'record errors mid-string (issue\'s own repro), and recover a ' +
+        'valid record after that via resync', () =>
+        runSettled(`${__dirname}/stream-tests/error-ndjson-bare-string-then-mid-string-error.json`).
+            then((result) => {
+                expect(result.errors, result.errors.map((e) => e.message).join('; ')).
+                    to.have.lengthOf(1);
+                expect(result.errors[0].message).to.match(/Unexpected/);
+                expect(result.values.map((v: any) => v.value)).to.deep.equal(['hello', 'third']);
+            }), 2000);
+
+    it('should still deliver a bare top-level string whose following ' +
+        'record is an unterminated string with no trailing newline (no ' +
+        'resync point at all)', () =>
+        runSettled(`${__dirname}/stream-tests/error-ndjson-bare-string-then-unterminated.json`).
+            then((result) => {
+                expect(result.errors, result.errors.map((e) => e.message).join('; ')).
+                    to.have.lengthOf(1);
+                expect(result.values.map((v: any) => v.value)).to.deep.equal(['hello']);
+            }), 2000);
+
+    it('should still deliver a bare top-level string immediately followed ' +
+        'by a differently-typed, perfectly valid record (no error at all)', () =>
+        runSettled(`${__dirname}/stream-tests/ndjson-bare-string-then-mismatched-type.json`).
+            then((result) => {
+                expect(result.errors, result.errors.map((e) => e.message).join('; ')).
+                    to.have.lengthOf(0);
+                expect(result.values.map((v: any) => v.value)).to.deep.equal(['hello', 42]);
+            }), 2000);
+
+    it('should still suppress a buffered string with nothing legal ' +
+        'attached directly after it in the SAME document (no whitespace, ' +
+        'so no confirmation boundary is ever reached) - guards against a ' +
+        'regression of the issue #9 stale-string fix above', () =>
+        runSettled(`${__dirname}/stream-tests/error-stale-string-before-close-error.json`).
+            then((result) => {
+                expect(result.errors, result.errors.map((e) => e.message).join('; ')).
+                    to.have.lengthOf(1);
+                expect(result.values, JSON.stringify(result.values)).to.have.lengthOf(0);
+            }), 2000);
+});
+
 // Regression test for https://github.com/tsouza/yajs/issues/8 ("OOM crash
 // on deeply nested arrays at the root").
 //

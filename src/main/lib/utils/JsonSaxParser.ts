@@ -463,8 +463,15 @@ export class JsonSaxParser {
         if (n === 0x20 || n === 0x09 || n === 0x0a || n === 0x0d) {
           if (this.awaiting === AWAIT_DOC_AFTER_VALUE) {
             // A separator between two top-level (NDJSON) values - ready
-            // for the next one now.
+            // for the next one now. This is the one point where a just-
+            // completed top-level value becomes unambiguously confirmed:
+            // nothing can retroactively invalidate it anymore (contrast
+            // with e.g. `"abc"]` - no whitespace ever appears between the
+            // string and the `]`, so this branch never runs and the
+            // structural error that follows is correctly free to still
+            // invalidate it). See onValueBoundary below.
             this.awaiting = AWAIT_DOC_VALUE;
+            this.callbacks.onValueBoundary?.();
           }
           continue; // whitespace
         }
@@ -1042,5 +1049,32 @@ export namespace JsonSaxParser {
     // abandoned mid-parse - it would otherwise keep thinking whatever
     // array/object the failed record left half-open is still open.
     onResync?: () => void;
+    // Fired once, right when whitespace confirms a just-completed
+    // top-level (NDJSON) value has nothing illegally attached directly
+    // after it - i.e. the `AWAIT_DOC_AFTER_VALUE` -> `AWAIT_DOC_VALUE`
+    // transition in the whitespace branch of the START case in parse().
+    // This is the genuine "this value is now permanently confirmed, no
+    // subsequent byte can retroactively invalidate it" boundary for a bare
+    // top-level value - see the comment at that call site for why
+    // `"abc"]` (no whitespace between the string and the offending `]`)
+    // correctly does NOT reach here, while `"abc"\n]` (or any other token
+    // right after it) does.
+    //
+    // Exists because completed strings-as-values are held back by a
+    // consumer (yajs.ts's `strValue`/`flushPendingString()`) until they're
+    // disambiguated from a possible object *key* still waiting on its `:`.
+    // Every other disambiguation point already has a natural callback to
+    // piggyback a flush onto (`onComma`, `onEndArray`/`onEndObject`,
+    // `onString` re-flushing before it overwrites, `finish()` at true
+    // end-of-stream) - this whitespace-driven NDJSON record boundary was
+    // the one disambiguation point with no callback at all, which is
+    // exactly why a bare top-level string immediately followed by a
+    // *different-typed* value (valid or not - including one that itself
+    // goes on to error) could lose that string entirely: nothing ever
+    // flushed it, and once the following record errors, the buffered
+    // string can no longer be told apart from a truly-invalidated one
+    // (issue #56). Optional (and a no-op if omitted), same
+    // backward-compatibility reasoning as `onResync` above.
+    onValueBoundary?: () => void;
   }
 }
