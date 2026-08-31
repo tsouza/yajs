@@ -41,6 +41,7 @@ export function runSettled(filePath: string, opts: RunSettledOptions = {}): Prom
         let ended = false;
         let settleTimer: ReturnType<typeof setTimeout>;
         let settled = false;
+        let grantedGrace = false;
 
         const settle = () => {
             if (settled) { return; }
@@ -56,9 +57,36 @@ export function runSettled(filePath: string, opts: RunSettledOptions = {}): Prom
             target.removeAllListeners();
             resolve({ values, errors, ended });
         };
+        // The quiet-period timer starts counting from t=0 (see
+        // scheduleSettle()'s first call below), racing the real event
+        // pipeline (fs read -> parse -> emit) rather than starting only
+        // once something has actually happened. Under normal load that
+        // race is never close, but on a busy CI runner running hundreds of
+        // these back to back it occasionally is: the timer fires and this
+        // resolves with zero recorded events a few milliseconds before the
+        // genuine (and correct) event actually arrives - a false "nothing
+        // happened" result caused entirely by test-harness timing, not by
+        // yajs itself (confirmed by hand: a fixture that flaked in CI this
+        // way errored correctly and immediately in 10/10 unloaded local
+        // runs). Rather than padding quietPeriodMs for every fixture
+        // (measured cost: a blanket increase from 100ms to 250ms slowed
+        // the ~300-fixture conformance suite from ~20s to ~45s+), grant
+        // one extra quiet-period-length grace window specifically for the
+        // zero-events case, which is the only one this race can produce -
+        // a fixture that already recorded a real event isn't at risk of
+        // this, and a fixture that's genuinely silent still settles after
+        // the grace window (or the hard cap, whichever is sooner).
+        const onQuietPeriodElapsed = () => {
+            if (!grantedGrace && values.length === 0 && errors.length === 0 && !ended) {
+                grantedGrace = true;
+                settleTimer = setTimeout(onQuietPeriodElapsed, quietPeriodMs);
+                return;
+            }
+            settle();
+        };
         const scheduleSettle = () => {
             clearTimeout(settleTimer);
-            settleTimer = setTimeout(settle, quietPeriodMs);
+            settleTimer = setTimeout(onQuietPeriodElapsed, quietPeriodMs);
         };
 
         const hardCapTimer = setTimeout(settle, hardCapMs);
