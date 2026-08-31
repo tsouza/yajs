@@ -113,10 +113,51 @@ export class YAJSPath {
 
             const o1 = this.stack[pointer1--];
             const o1Type = o1.getType();
-            let o2 = jsonPath.stack[pointer2--];
+            const o2 = jsonPath.stack[pointer2--];
 
             if (o1Type === PathOperator.Type.DESCENDANT) {
-                const prevScan = this.stack[pointer1--];
+                let prevScan = this.stack[pointer1--];
+                // Issue #39: Wildcard.match() and Descendant.match() are
+                // both unconditionally true (see their own match()), so
+                // neither one ever actually constrains "how far back" this
+                // scan needs to reach - the scan below stops at the very
+                // first candidate it examines once prevScan is satisfied,
+                // which for a non-selective prevScan is *always* the very
+                // next position level, silently capping '..' at exactly one
+                // hop whenever it's immediately preceded by a bare wildcard
+                // or another descendant (`$.*..*` repro), unlike every other
+                // '..' composition, which reaches arbitrary depth. The
+                // operator that actually constrains the scan is always the
+                // next SELECTIVE one further back in the pattern - a real
+                // key, or Root itself, and Root is always eventually reached
+                // this way since pattern[0] is always Root (the YAJSPath
+                // constructor guarantees it) - so collapse through every
+                // non-selective operator first and scan for that instead.
+                // ('$.*..*' and '$..*..*' both reduce to "scan for Root"
+                // this way, exactly like a plain '$..a' already does.)
+                //
+                // Each collapsed WILDCARD, unlike DESCENDANT, still owes its
+                // OWN single mandatory hop of real position depth (Wildcard
+                // means "exactly one of anything", not "zero or more" -
+                // that's what the still-separate wildcard-into-array-
+                // overshoot branch further below, and the DESCENDANT branch
+                // itself, already guard for every OTHER wildcard in
+                // match()). Collapsing must not silently forgive that and
+                // let e.g. '$.*..*' match a position only one level deep in
+                // total (the trailing wildcard's own hop, with nothing left
+                // for the leading one) - mandatoryHops counts how many such
+                // hops still need to fit before the ultimate selective
+                // target, and is subtracted from the scan's search ceiling
+                // below.
+                let mandatoryHops = 0;
+                while (pointer1 >= 0 &&
+                    (prevScan.getType() === PathOperator.Type.WILDCARD ||
+                        prevScan.getType() === PathOperator.Type.DESCENDANT)) {
+                    if (prevScan.getType() === PathOperator.Type.WILDCARD) {
+                        mandatoryHops++;
+                    }
+                    prevScan = this.stack[pointer1--];
+                }
                 // An intervening ARRAY position must always be treated as
                 // transparent scaffolding for this backward "how far back
                 // does '..' need to reach" scan - it can never itself be
@@ -134,15 +175,38 @@ export class YAJSPath {
                 // what the scan is looking for, letting an unrelated array
                 // masquerade as a match for a key that's never actually
                 // present anywhere (a false positive - issue #27's
-                // `$..x..y` repro). Skipping every ARRAY level here,
-                // unconditionally, and only ever testing prevScan.match()
-                // against a real (non-ARRAY) ancestor position fixes both:
-                // the scan keeps walking back through as many arrays as
-                // necessary until it either finds a genuine match or runs
-                // out of position stack.
-                while (pointer2 >= 0 && (o2.getType() === PathOperator.Type.ARRAY || !prevScan.match(o2))) {
-                    o2 = jsonPath.stack[pointer2--];
+                // `$..x..y` repro). Skipping every ARRAY level, and only
+                // ever testing prevScan.match() against a real (non-ARRAY)
+                // ancestor position, fixes both.
+                //
+                // Delegated to jsonPath.nearestAncestorIndex() (issue #34):
+                // walking the position stack back one level at a time here,
+                // on every single match() attempt, is O(depth) work per
+                // attempt - and since a '..'-containing path is never
+                // `definite` (see the constructor), a match is attempted at
+                // *every* depth as the document streams in, compounding to
+                // O(depth^2) for a uniformly deep document. StreamPosition
+                // overrides nearestAncestorIndex() with an incrementally
+                // maintained index that answers this same query in
+                // O(log depth) as the position grows/shrinks, instead of
+                // rescanning the full ancestor chain from scratch each time
+                // (the base implementation here - a plain linear scan - stays
+                // the fallback for any non-streaming YAJSPath position, e.g.
+                // one built directly via Builder in tests).
+                const foundIndex = jsonPath.nearestAncestorIndex(prevScan, pointer2 + 1 - mandatoryHops);
+                if (foundIndex < 0) {
+                    // Unlike a ChildNode/Root prevScan that's simply never
+                    // found (already handled correctly by the outer loop's
+                    // own pointer2 < 0 checks - see below), a collapsed
+                    // WILDCARD's still-outstanding mandatoryHops can push
+                    // the search ceiling itself negative even when prevScan
+                    // (Root) is trivially "found" at every other position -
+                    // failing fast here, rather than falling through to
+                    // pointer2's own sign, keeps that unrelated success case
+                    // from masking this one.
+                    return false;
                 }
+                pointer2 = foundIndex - 1;
             } else if (o2.getType() === PathOperator.Type.ARRAY) {
                 // A matched array is transparent for its parent key/root, so
                 // this array level doesn't consume a pattern operator - but
@@ -150,8 +214,21 @@ export class YAJSPath {
                 // elements one at a time rather than being flattened
                 // (issue #14), so a SECOND consecutive array right beneath
                 // it belongs to one of those elements' own subtree, not to
-                // this key's path, and must not also be skipped transparently.
-                if (pointer2 >= 0 && jsonPath.stack[pointer2].getType() === PathOperator.Type.ARRAY) {
+                // this key's path, and must not also be skipped transparently
+                // - UNLESS the pattern operator that precedes this Wildcard
+                // (this.stack at the now-decremented pointer1) is itself a
+                // WILDCARD or DESCENDANT, which - exactly like the
+                // wildcard-into-array-overshoot branch further below -
+                // is specifically designed to tolerate unbounded
+                // intervening depth (issue #38's `$..*` vs `{"m":[[{"a":1}]]}`
+                // repro: the {"a":1} object, two array levels deep, must
+                // still be reachable as its own independent match).
+                const tolerateConsecutiveArrays = o1Type === PathOperator.Type.WILDCARD &&
+                    pointer1 >= 0 &&
+                    (this.stack[pointer1].getType() === PathOperator.Type.WILDCARD ||
+                        this.stack[pointer1].getType() === PathOperator.Type.DESCENDANT);
+                if (!tolerateConsecutiveArrays &&
+                    pointer2 >= 0 && jsonPath.stack[pointer2].getType() === PathOperator.Type.ARRAY) {
                     return false;
                 }
                 // Retrying the SAME pattern operator (o1) against whatever
@@ -229,6 +306,28 @@ export class YAJSPath {
         }
 
         return pointer2 < 0;
+    }
+
+    // Finds the largest position-stack index <= fromIndex whose operator
+    // satisfies `target` (an ARRAY-typed position is always transparent
+    // scaffolding here, never itself a valid match, regardless of what
+    // target.match() would otherwise say about it - see the '..' scan's own
+    // comment in match()), or -1 if none exists anywhere down to the root.
+    //
+    // This is the '..' backward-scan's full O(depth) fallback. It stays
+    // correct on its own for any plain YAJSPath position - e.g. one built
+    // directly via Builder in tests - which never accumulates the
+    // incremental cache StreamPosition overrides this with for real
+    // streaming (issue #34's O(log depth) fix - see StreamPosition's
+    // override for the full reasoning).
+    nearestAncestorIndex(target: PathOperator, fromIndex: number): number {
+        for (let i = fromIndex; i >= 0; i--) {
+            const candidate = this.stack[i];
+            if (candidate.getType() !== PathOperator.Type.ARRAY && target.match(candidate)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     pathDepth(): number {

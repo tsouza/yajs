@@ -622,6 +622,257 @@ describe('yajs', () => {
             }));
     });
 
+    // Regression tests for GitHub issue #38: when a selector matches a
+    // container AND something independently matched nested inside it
+    // (typical of '..'/wildcard selectors), the ancestor's own captured
+    // value used to silently lose that whole subtree - or, for an
+    // array-of-array shape, the nested match was dropped entirely instead.
+    //
+    // Root cause (StreamContext.ts's dispatch()): StreamContext suspends
+    // whatever dispatcher is currently active whenever a new, independently
+    // matched candidate value starts, and only the *active* dispatcher ever
+    // receives events - so the suspended ancestor never received the one
+    // event (startObject()/startArray()) that would otherwise have attached
+    // the nested value under its own currently-pending key/array slot; that
+    // event went only to the new, more specific dispatcher instead. Fixed
+    // by injecting the completed child's own already-fully-built value
+    // directly into the resuming ancestor (via its own onValue(), the exact
+    // entry point a live event would have used) at the moment it's popped
+    // back to active - O(1) per suspend/resume pair, not O(child subtree
+    // size), so this doesn't reintroduce the O(depth^2) dispatcher fan-out
+    // issue #8 fixed elsewhere.
+    //
+    // A second, independent bug also contributed to the array-of-array
+    // "dropped" variant specifically: see 02-path.ts's "descendant/wildcard
+    // tolerates consecutive arrays" tests for that root cause (a YAJSPath.
+    // match() bug, not a StreamContext one) - both fixes are required for
+    // case 4 below to pass.
+    describe('nested match no longer corrupts or drops its ancestor\'s own value (issue #38)', () => {
+
+        it('does not corrupt the ancestor\'s value when a direct child also independently matches (own repro 1: $..* vs {"top":{"inner":{"a":1}}})', () =>
+            testJson('{"top":{"inner":{"a":1}}}', '$..*').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'top', 'inner', 'a' ], value: 1 },
+                    { path: [ 'top', 'inner' ], value: { a: 1 } },
+                    { path: [ 'top' ], value: { inner: { a: 1 } } },
+                ]);
+            }));
+
+        it('fixes every ancestor above the innermost match, not just the immediate parent (own repro 2: three nested levels)', () =>
+            testJson('{"l1":{"l2":{"l3":{"a":1}}}}', '$..*').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'l1', 'l2', 'l3', 'a' ], value: 1 },
+                    { path: [ 'l1', 'l2', 'l3' ], value: { a: 1 } },
+                    { path: [ 'l1', 'l2' ], value: { l3: { a: 1 } } },
+                    { path: [ 'l1' ], value: { l2: { l3: { a: 1 } } } },
+                ]);
+            }));
+
+        it('only loses the corrupted span, not sibling keys outside it (own repro 3: $..a vs {"a":{"b":{"a":{"c":1}}}})', () =>
+            testJson('{"a":{"b":{"a":{"c":1}}}}', '$..a').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'a', 'b', 'a' ], value: { c: 1 } },
+                    { path: [ 'a' ], value: { b: { a: { c: 1 } } } },
+                ]);
+            }));
+
+        it('does not drop the nested match entirely for an array-of-array shape (own repro 4: $..* vs {"m":[[{"a":1}]]})', () =>
+            testJson('{"m":[[{"a":1}]]}', '$..*').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'm', 'a' ], value: 1 },
+                    { path: [ 'm' ], value: { a: 1 } },
+                    { path: [ 'm' ], value: [ { a: 1 } ] },
+                ]);
+            }));
+
+        it('chains correctly across three levels of independently-matched nesting (adversarial, deeper than any own repro)', () =>
+            testJson('{"m":[[[{"a":1}]]]}', '$..*').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'm', 'a' ], value: 1 },
+                    { path: [ 'm' ], value: { a: 1 } },
+                    { path: [ 'm' ], value: [ { a: 1 } ] },
+                    { path: [ 'm' ], value: [ [ { a: 1 } ] ] },
+                ]);
+            }));
+
+        it('respects dropKeys applied within each dispatcher\'s own scope when injecting a resumed ancestor\'s value (adversarial: $..*<a>)', () =>
+            testJson('{"top":{"inner":{"a":1,"b":2}}}', '$..*<a>').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'top', 'inner', 'a' ], value: 1 },
+                    { path: [ 'top', 'inner', 'b' ], value: 2 },
+                    { path: [ 'top', 'inner' ], value: { b: 2 } },
+                    { path: [ 'top' ], value: { inner: { b: 2 } } },
+                ]);
+            }));
+
+        it('does not leak across NDJSON document boundaries (adversarial: two documents back to back)', () =>
+            testJson('{"a":{"a":1}}\n{"a":{"a":2}}', '$..a').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'a', 'a' ], value: 1 },
+                    { path: [ 'a' ], value: { a: 1 } },
+                    { path: [ 'a', 'a' ], value: 2 },
+                    { path: [ 'a' ], value: { a: 2 } },
+                ]);
+            }));
+
+        it('still matches a single, non-nested container correctly (must not regress the common case)', () =>
+            testJson('{"a":{"b":1,"c":2}}', '$.a').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([ { b: 1, c: 2 } ]);
+            }));
+    });
+
+    // Regression tests for GitHub issue #39: '$.*..*' silently stopped one
+    // hop short of where '$.a..*' and '$..*..*' both correctly reach on the
+    // identical document shape - see 02-path.ts's "descendant reaches
+    // arbitrary depth past a bare wildcard" tests for the detailed
+    // root-cause writeup and YAJSPath.match()-level unit tests; these
+    // confirm the fix end-to-end through the real parser and streaming
+    // machinery.
+    describe('descendant reaches arbitrary depth past a bare wildcard (issue #39)', () => {
+
+        it('reaches two hops past the wildcard, not just one (own repro: $.*..* vs {"a":{"x":1,"b":{"c":2}}})', () =>
+            testJson('{"a":{"x":1,"b":{"c":2}}}', '$.*..*').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'a', 'x' ], value: 1 },
+                    { path: [ 'a', 'b', 'c' ], value: 2 },
+                    { path: [ 'a', 'b' ], value: { c: 2 } },
+                ]);
+            }));
+
+        it('matches identically via the equivalent named-key form $.a..* (control, must already pass)', () =>
+            testJson('{"a":{"x":1,"b":{"c":2}}}', '$.a..*').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'a', 'x' ], value: 1 },
+                    { path: [ 'a', 'b', 'c' ], value: 2 },
+                    { path: [ 'a', 'b' ], value: { c: 2 } },
+                ]);
+            }));
+
+        it('matches identically via the equivalent double-descendant form $..*..* (control, must already pass)', () =>
+            testJson('{"a":{"x":1,"b":{"c":2}}}', '$..*..*').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [ 'a', 'x' ], value: 1 },
+                    { path: [ 'a', 'b', 'c' ], value: 2 },
+                    { path: [ 'a', 'b' ], value: { c: 2 } },
+                ]);
+            }));
+
+        it('does not over-match a position that is genuinely too shallow (adversarial: $.*..* vs a single flat level)', () =>
+            testJson('{"a":1,"b":2}', '$.*..*').then((array) => {
+                expect(array).to.have.lengthOf(0);
+            }));
+
+        it('still reaches through a named array via a bare wildcard (adversarial: $.*..* vs {"arr":[1,2,3]})', () =>
+            testJson('{"arr":[1, 2, 3]}', '$.*..*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([ 1, 2, 3 ]);
+            }));
+    });
+
+    // Regression + performance-guard tests for GitHub issue #34: a '..'-
+    // containing path degraded quadratically with document nesting depth,
+    // because YAJSPath.match()'s DESCENDANT branch walked the *entire*
+    // position stack backward on every single match attempt, and - since a
+    // '..' path is never `definite` - a match is attempted at *every* depth
+    // as the document streams in: O(depth) work x O(depth) attempts =
+    // O(depth^2). Fixed via StreamPosition.nearestAncestorIndex(), an
+    // incrementally maintained index answering "nearest ancestor with key K"
+    // in O(log depth) instead of rescanning from scratch - see its own and
+    // YAJSPath.nearestAncestorIndex()'s field/method comments for the full
+    // design.
+    //
+    // These use a bounded depth (5,000) rather than issue #34's own
+    // 20,000-deep measurement, mirroring how issue #8's own regression test
+    // (04-error-handling.ts) picked a bound generous enough to clearly
+    // distinguish "fixed" from "regressed" without making the test itself
+    // slow or flaky. Note the bound below is intentionally more generous
+    // than issue #8's: a '..' selector that matches at *every* nesting
+    // level (as these do) inherently reports one path array per level, of
+    // growing length - the resulting O(depth^2) total *output* size is not
+    // itself a bug (it's an unavoidable consequence of how much there is to
+    // report), only the extra O(depth^2) *matching* work issue #34
+    // describes is.
+    describe('descendant matching stays roughly linear with document depth (issue #34)', () => {
+
+        function buildDeepChain(depth: number, key: string): string {
+            return `${Array(depth).fill(`{"${key}":`).join('')}1${'}'.repeat(depth)}`;
+        }
+
+        it('matches a 5,000-deep chain of the same repeated key in well under the pre-fix time (own repro shape: $..a)', () => {
+            const depth = 5000;
+            const json = buildDeepChain(depth, 'a');
+            const start = Date.now();
+            return testJson(json, '$..a').then((array) => {
+                const elapsedMs = Date.now() - start;
+                expect(array).to.have.lengthOf(depth);
+                // Issue #34 measured ~931ms at this exact depth pre-fix, and
+                // ~14s at depth 20,000 (quadratic); this fix measures well
+                // under 300ms at depth 5,000 locally. A generous upper bound
+                // for a slow CI machine - comfortably above the fixed
+                // timing (leaving headroom for the inherent O(depth)
+                // matches x O(depth) average path length output cost
+                // described above) but nowhere near what either the
+                // pre-fix flat ~931ms or its quadratic trajectory would
+                // produce here, so an accidental revert would still be
+                // caught.
+                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(4000);
+            });
+        }, 20000);
+
+        it('the underlying ancestor scan itself - not just the combined match+output cost above - stays near-flat with depth, isolated from any output-size effect', () => {
+            // '$.nonexistent..a' against a chain of nested "a" keys, not
+            // '$..z': the trailing pattern operator is checked *before*
+            // match() ever reaches the DESCENDANT branch (see the top-of-
+            // stack check at the very start of match()), so a trailing key
+            // that never matches anything (like 'z' against an all-"a"
+            // chain) short-circuits there on every attempt without ever
+            // running the backward scan this test means to isolate -
+            // silently measuring almost nothing. 'a' as the trailing key
+            // matches at every depth (entering the DESCENDANT branch every
+            // time), while 'nonexistent' - the operator *before* the '..',
+            // i.e. what the scan actually searches the ancestor chain for -
+            // never appears anywhere, forcing every single attempt into a
+            // genuine (failing) full-depth search with zero matches, so no
+            // path array is ever built either - isolating purely the
+            // backward-scan cost issue #34's own root-cause writeup names,
+            // the same way issue #8's own StreamContext-level test
+            // (08-stream-context.ts) isolates dispatcher bookkeeping from
+            // tokenizer overhead.
+            function timeScan(depth: number): Promise<number> {
+                const json = buildDeepChain(depth, 'a');
+                const start = Date.now();
+                return testJson(json, '$.nonexistent..a').then((array) => {
+                    expect(array).to.have.lengthOf(0);
+                    return Date.now() - start;
+                });
+            }
+
+            return timeScan(1000). // warm up the JIT first
+                then(() => timeScan(2000)).
+                then((small) => timeScan(20000).then((large) => {
+                    // A genuinely near-O(depth) (or better) scan should take
+                    // on the order of 10x as long for 10x the depth; the
+                    // pre-fix O(depth) *per attempt*, attempted at every one
+                    // of O(depth) depths, took on the order of 100x as long.
+                    // 30x is comfortably below quadratic and comfortably
+                    // above ordinary timing noise (mirrors
+                    // 08-stream-context.ts's own issue #8 ratio test).
+                    expect(large, `small=${small}ms large=${large}ms`).
+                        to.be.lessThan(Math.max(small, 1) * 30);
+                }));
+        }, 30000);
+
+        it('a non-descendant path is unaffected by the fix (must not regress the common case)', () => {
+            const depth = 20000;
+            const json = buildDeepChain(depth, 'a');
+            const start = Date.now();
+            return testJson(json, '$').then((array) => {
+                const elapsedMs = Date.now() - start;
+                expect(array).to.have.lengthOf(1);
+                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(3000);
+            });
+        }, 10000);
+    });
+
     // Regression tests for GitHub issue #37: AbstractFilteredOperator.
     // matchFilter() discarded the key-name-equality `matches` boolean
     // whenever a filter expression was attached, so '[<filter>]<key>'
