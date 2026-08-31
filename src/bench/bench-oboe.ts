@@ -1,6 +1,6 @@
 import { createReadStream } from 'fs';
 import { Meter } from 'measured';
-import * as oboe from 'oboe';
+import oboe from 'oboe';
 import { createGunzip } from 'zlib';
 
 const TYPE = process.env.TYPE || 'ndjson';

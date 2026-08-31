@@ -1,7 +1,7 @@
-import * as AsciiTable from 'ascii-table';
+import AsciiTable from 'ascii-table';
 import { fork } from 'child_process';
 import { Stats } from 'fast-stats';
-import * as humanizeDuration from 'humanize-duration';
+import humanizeDuration from 'humanize-duration';
 
 const time = humanizeDuration.humanizer({
     language: 'shortEn',
@@ -28,21 +28,25 @@ const tableDataset4 = createTable(4);
 benchmark('yajs', 1, '$.field2.nested', tableDataset1).
 then(() => benchmark('jsonstream', 1, 'field2.nested.*', tableDataset1)).
 then(() => benchmark('oboe', 1, '!.field2.nested[*]', tableDataset1)).
+then(() => benchmark('stream-json', 1, '(^|\\.)nested\\.\\d+$', tableDataset1)).
 then(() => console.log(tableDataset1.toString())).
 
 then(() => benchmark('yajs', 2, '$..plugins', tableDataset2)).
 then(() => benchmark('jsonstream', 2, '_source..plugins.*', tableDataset2)).
 then(() => benchmark('oboe', 2, '!._source..plugins[*]', tableDataset2)).
+then(() => benchmark('stream-json', 2, '(^|\\.)plugins\\.\\d+$', tableDataset2)).
 then(() => console.log(tableDataset2.toString())).
 
 then(() => benchmark('yajs', 3, '$..plugins', tableDataset3, 'json')).
 then(() => benchmark('jsonstream', 3, '*._source..plugins.*', tableDataset3, 'json')).
 then(() => benchmark('oboe', 3, '![*]._source..plugins[*]', tableDataset3, 'json')).
+then(() => benchmark('stream-json', 3, '(^|\\.)plugins\\.\\d+$', tableDataset3, 'json')).
 then(() => console.log(tableDataset3.toString())).
 
 then(() => benchmark('yajs', 4, '$..array.deep1', tableDataset4, 'json')).
 then(() => benchmark('jsonstream', 4, '*..array.*.deep1', tableDataset4, 'json')).
 then(() => benchmark('oboe', 4, '!..array[*].deep1', tableDataset4, 'json')).
+then(() => benchmark('stream-json', 4, '(^|\\.)array\\.\\d+\\.deep1$', tableDataset4, 'json')).
 then(() => console.log(tableDataset4.toString()));
 
 function benchmark(bench: string, dataset: number, path: string,
@@ -54,6 +58,14 @@ function benchmark(bench: string, dataset: number, path: string,
     return new Promise<void>((resolve, reject) => {
         const stats = new Stats();
         const child = fork(`./bench-${bench}.ts`, [], {
+            // These are hand-written scripts run directly (not compiled by
+            // the main tsc build - see tsconfig.json's exclude), so the
+            // child process needs a TS loader; tsx's --import hook handles
+            // both that and this codebase's CommonJS-style extensionless
+            // imports (e.g. `from '../main/yajs'`), which Node's own
+            // native --experimental-strip-types enforces strict ESM
+            // extensions against instead of resolving.
+            execArgv: ['--import', 'tsx'],
             env: { DATA: `${dataset}`, JSON_PATH: path, TYPE: type },
         }).
         on('message', (m) => {

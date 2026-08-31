@@ -2,6 +2,15 @@
 
 This is a benchmark comparing yajs with other two json streaming js libraries: [oboe.js](https://github.com/jimhigson/oboe.js) and [JSONStream](https://github.com/dominictarr/JSONStream).
 
+*Update (2026)*: the bench suite's toolchain (which had bit-rotted after
+`ts-node` was removed) was restored to working order, running the
+hand-written `bench-*.ts` scripts directly via [tsx](https://github.com/privatenumber/tsx)
+(see `package.json`). While restoring it, [stream-json](https://www.npmjs.com/package/stream-json)
+was added as a fourth comparison alongside the original oboe.js/JSONStream
+pair: oboe.js has seen no meaningful release since ~2016 and JSONStream is
+maintained but old-style, while stream-json is the actively-maintained,
+widely-used modern standard for this class of tool today.
+
 ## Method
 
 For each library, a sequence of different datasets was used to process with equivalent selection path. It was measured the total time of execution and also the rate of the objects produced per second (EPS) using [measured](https://github.com/felixge/node-measured).
@@ -21,12 +30,19 @@ Dataset | Format | Size  | Object size | Objects | Root Type
 
 ### Selection paths
 
-Dataset/Library   | yajs              | JSONStream             | oboe.js
-:----------------:|-------------------|------------------------|----------------------------
-1                 | `$.field2.nested` | `field2.nested.*`      | `!.field2.nested[*]`
-2                 | `$..plugins`      | `_source..plugins.*`   | `!._source..plugins[*]`
-3                 | `$..plugins`      | `*._source..plugins.*` | `![*]._source..plugins[*]`
-4                 | `$..array.deep1`  | `*..array.*.deep1`     | `!..array[*].deep1`
+Dataset/Library   | yajs              | JSONStream             | oboe.js                     | stream-json
+:----------------:|-------------------|------------------------|------------------------------|------------------------
+1                 | `$.field2.nested` | `field2.nested.*`      | `!.field2.nested[*]`        | `(^\|\.)nested\.\d+$`
+2                 | `$..plugins`      | `_source..plugins.*`   | `!._source..plugins[*]`     | `(^\|\.)plugins\.\d+$`
+3                 | `$..plugins`      | `*._source..plugins.*` | `![*]._source..plugins[*]`  | `(^\|\.)plugins\.\d+$`
+4                 | `$..array.deep1`  | `*..array.*.deep1`     | `!..array[*].deep1`         | `(^\|\.)array\.\d+\.deep1$`
+
+*NOTE: stream-json has no dot-path selector DSL of its own - its `pick()`
+filter matches a `RegExp` (or string/function) against the joined stack of
+keys/array-indices a token is nested under. The expressions above are that
+`RegExp`'s source, written to match on the tail of the path so they fire
+once per matched element regardless of nesting depth, mirroring the other
+three libraries' recursive (`..`) selectors. See `bench-stream-json.ts`.*
 
 ## Software Configuration
 
