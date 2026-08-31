@@ -429,6 +429,41 @@ describe('path match', () => {
         });
     });
 
+    // Regression tests for GitHub issue #37: AbstractFilteredOperator.
+    // matchFilter() used to discard the `matches` boolean it was given (the
+    // actual key-name/wildcard-equality check computed by
+    // ChildNode.matches()/Wildcard.match()) whenever a filter expression was
+    // attached, replacing the whole verdict with only the ancestor-filter
+    // predicate's own outcome. So '$..[key1]child' matched EVERY sibling key
+    // inside a 'key1'-satisfying ancestor, not just keys literally named
+    // "child" - because once the filter was present, the "is this key
+    // actually named child" check never factored in at all.
+    describe('filter does not drop the key-name check (issue #37)', () => {
+        it('does not match a differently-named sibling key inside a filtered ancestor ' +
+            '($..[key1]child vs $.key1.other)', () => {
+            const siblingPath = YAJSPath.parse('$.key1.other');
+            const descendant = YAJSPath.parse('$..[key1]child');
+
+            expect(descendant.match(siblingPath)).to.equal(false);
+        });
+
+        it('still matches the correctly-named key inside the filtered ancestor ' +
+            '($..[key1]child vs $.key1.child)', () => {
+            const childPath = YAJSPath.parse('$.key1.child');
+            const descendant = YAJSPath.parse('$..[key1]child');
+
+            expect(descendant.match(childPath)).to.equal(true);
+        });
+
+        it('still rejects when the filter predicate itself is false, independent of the ' +
+            'key-name check ($..[key5]child vs $.key1.child)', () => {
+            const childPath = YAJSPath.parse('$.key1.child');
+            const descendant = YAJSPath.parse('$..[key5]child');
+
+            expect(descendant.match(childPath)).to.equal(false);
+        });
+    });
+
     // Regression tests for issues #18 and #19. #18: YAJSPath.parse() used
     // to rely on ANTLR's default ConsoleErrorListener, which only logs a
     // syntax error to stderr rather than stopping parsing - so a malformed

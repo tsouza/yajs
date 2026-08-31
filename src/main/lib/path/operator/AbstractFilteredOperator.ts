@@ -11,7 +11,7 @@ export abstract class AbstractFilteredOperator extends PathOperator {
         super();
         this.filterHelper = new ScriptFilterHelper(filterKeys, filterExpression);
         this.matchFilterDelegate = this.filterHelper.isFiltered() ?
-            (_matches: boolean, operator: PathOperator) => this.filterHelper.
+            (matches: boolean, operator: PathOperator) => matches && this.filterHelper.
                 filters((key) => operator.referencedBy(key)) :
             (matches: boolean, _operator: PathOperator) => matches;
     }
