@@ -57,6 +57,14 @@ const TDQSTR6 = C.TDQSTR6 = 0x76;
 // of falling through into whatever case happens to follow textually.
 const ERROR   = C.ERROR   = 0x91;
 
+// UTF-8 byte-order mark (issue #51). A leading BOM is a common artifact of
+// Windows/Excel tooling and some editors - tolerated (stripped) here rather
+// than rejected as a hard parse error, but ONLY when it's the very first
+// thing in the whole stream: a BOM anywhere else (e.g. before a later
+// document in an NDJSON stream) is not this exception and must still fail
+// like any other unexpected byte.
+const UTF8_BOM = [0xef, 0xbb, 0xbf];
+
 // --------------------------------------------------------------------
 // Structural (between-token) grammar validation.
 //
@@ -156,6 +164,19 @@ export class JsonSaxParser {
   // "stream ended right after legitimately completing the/a value"
   // (valid - including after the last value of an NDJSON stream).
   private sawValue: boolean = false;
+
+  // BOM-stripping state (issue #51). `bomChecked` becomes permanently true
+  // the instant we've either confirmed a real leading BOM (and stripped it)
+  // or ruled one out (because some byte didn't match) - from then on this
+  // logic never runs again, which is what keeps a BOM only tolerated when
+  // it's the very first thing in the stream. `bomPending` holds however
+  // many of UTF8_BOM's bytes have matched so far but couldn't yet be
+  // confirmed as a real BOM (vs. e.g. a lone malformed 0xEF byte) because
+  // the buffer ran out first - exactly the same "must survive a chunk
+  // boundary" requirement as `tdq`/the UTF-8 decoder fields above, since a
+  // 3-byte BOM can legitimately arrive split across separate write() calls.
+  private bomChecked: boolean = false;
+  private bomPending: number[] = [];
 
   constructor(callback: JsonSaxParser.ICallbacks) {
     this.callbacks = callback;
@@ -268,7 +289,49 @@ export class JsonSaxParser {
     return false;
   }
 
+  // Consumes a leading UTF-8 BOM (issue #51) from `buffer` if - and only if -
+  // it's still possible for this to be the very first bytes of the whole
+  // stream (`!this.bomChecked`). Returns whatever of `buffer` is left to
+  // actually tokenize: with the BOM's bytes dropped once all 3 are
+  // confirmed, unchanged once a mismatch rules a BOM out (see below for why
+  // any bytes tentatively held from an EARLIER call must be replayed back
+  // onto the front of it in that case), or empty while still waiting on
+  // more bytes to arrive before either can be decided.
+  private stripLeadingBom(buffer: Buffer): Buffer {
+    if (this.bomChecked) { return buffer; }
+    let i = 0;
+    while (this.bomPending.length < 3 && i < buffer.length &&
+        buffer[i] === UTF8_BOM[this.bomPending.length]) {
+      this.bomPending.push(buffer[i]);
+      i++;
+    }
+    if (this.bomPending.length === 3) {
+      // All 3 BOM bytes confirmed (possibly split across earlier calls) -
+      // drop them and never check again.
+      this.bomChecked = true;
+      this.bomPending = [];
+      return buffer.subarray(i);
+    }
+    if (i === buffer.length) {
+      // Buffer ran out before a mismatch appeared and before reaching 3 -
+      // still undecided; keep the held bytes pending for the next call and
+      // report nothing to tokenize from this one.
+      return Buffer.alloc(0);
+    }
+    // A mismatch at buffer[i] rules out a BOM for good. Whatever bytes were
+    // tentatively held (possibly from an earlier, separate write() call)
+    // were never actually part of a BOM, so they must be fed to the
+    // tokenizer after all - replay them back onto the front of the
+    // remaining buffer (from i onward, which still includes the
+    // mismatching byte itself) instead of silently dropping them.
+    this.bomChecked = true;
+    const held = this.bomPending;
+    this.bomPending = [];
+    return held.length === 0 ? buffer : Buffer.concat([Buffer.from(held), buffer.subarray(i)]);
+  }
+
   parse(buffer: Buffer) {
+    buffer = this.stripLeadingBom(buffer);
     let n;
     for (let i = 0, l = buffer.length; i < l; i++) {
       switch (this.state) {
@@ -718,6 +781,24 @@ export class JsonSaxParser {
       // The single onError for the actual failure was already emitted;
       // don't also report a misleading "end of input" error on top of it.
       return;
+    }
+    if (!this.bomChecked && this.bomPending.length > 0) {
+      // The stream ended before stripLeadingBom() ever saw a byte that
+      // would confirm (3 matched) or rule out (a mismatch) a leading BOM -
+      // e.g. input that's just a truncated 1- or 2-byte fragment of one.
+      // Those held bytes were therefore never actually a BOM; mark the
+      // check permanently done (bomChecked = true short-circuits
+      // stripLeadingBom back to a no-op) and feed them through normally so
+      // whatever they really are still gets the usual error treatment
+      // instead of being silently dropped.
+      const held = this.bomPending;
+      this.bomPending = [];
+      this.bomChecked = true;
+      this.parse(Buffer.from(held));
+      if (this.state === ERROR) {
+        // parse() above already reported it.
+        return;
+      }
     }
     this.flushPendingNumber();
     if (this.state !== START) {
