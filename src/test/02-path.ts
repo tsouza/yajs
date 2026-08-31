@@ -240,4 +240,53 @@ describe('path match', () => {
         });
     });
 
+    // Regression tests for issues #18 and #19. #18: YAJSPath.parse() used
+    // to rely on ANTLR's default ConsoleErrorListener, which only logs a
+    // syntax error to stderr rather than stopping parsing - so a malformed
+    // selector either silently fell back to a best-effort (badly wrong)
+    // parse tree, or crashed later with an unrelated internal exception,
+    // depending on exactly how malformed it was. Fixed with a custom
+    // ThrowingErrorListener that fails fast and predictably. #19 is a
+    // narrower, separate gap the same fix exposed: the grammar's `path`
+    // rule didn't require EOF unless a trailing project/drop-keys clause
+    // was present, so ANTLR never even flagged trailing garbage after an
+    // otherwise-valid prefix as a syntax error in the first place - no
+    // error listener, however correct, can catch what the grammar itself
+    // never asks it to detect. Fixed by requiring EOF unconditionally in
+    // YAJS.g4 and regenerating (see package.json's exact-pinned, non-caret
+    // antlr4ts-cli version - the caret range resolved a canary build whose
+    // codegen doesn't compile against this project's pinned antlr4ts
+    // runtime typings; 0.4.0-alpha.4 is confirmed compatible).
+    describe('invalid selector syntax (issues #18, #19)', () => {
+
+        it('should throw a clean, catchable error for an empty selector, ' +
+            'not silently produce a $-equivalent match-everything path', () => {
+            expect(() => YAJSPath.parse('')).to.throw(/Invalid selector syntax/);
+        });
+
+        it('should throw for a selector not starting with $', () => {
+            expect(() => YAJSPath.parse('garbage')).to.throw(/Invalid selector syntax/);
+        });
+
+        it('should throw for a dangling trailing dot', () => {
+            expect(() => YAJSPath.parse('$.')).to.throw(/Invalid selector syntax/);
+        });
+
+        it('should throw for trailing garbage after an otherwise-valid ' +
+            'selector (issue #19 - the grammar previously never even ' +
+            'looked at what came after a complete-enough prefix)', () => {
+            expect(() => YAJSPath.parse('$$')).to.throw(/Invalid selector syntax/);
+            expect(() => YAJSPath.parse('$.a.b$$$')).to.throw(/Invalid selector syntax/);
+            expect(() => YAJSPath.parse('$.a garbage')).to.throw(/Invalid selector syntax/);
+            expect(() => YAJSPath.parse('$xyz')).to.throw(/Invalid selector syntax/);
+        });
+
+        it('should still parse a valid selector with a trailing project ' +
+            'clause correctly (must not break the one case that already ' +
+            'required EOF before issue #19\'s fix)', () => {
+            expect(() => YAJSPath.parse('$.a{b}')).to.not.throw();
+            expect(() => YAJSPath.parse('$.a<b>')).to.not.throw();
+        });
+    });
+
 });

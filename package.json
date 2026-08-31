@@ -43,7 +43,7 @@
     "@types/node": "^22.10.0",
     "@types/through": "0.0.33",
     "@vitest/coverage-v8": "^4.1.11",
-    "antlr4ts-cli": "^0.4.0-alpha.4",
+    "antlr4ts-cli": "0.4.0-alpha.4",
     "ascii-table": "0.0.9",
     "eslint": "^9.39.5",
     "fast-check": "^4.9.0",
