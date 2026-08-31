@@ -66,6 +66,12 @@ function createSaxParser(context: StreamContext, stream: ThroughStream,
     // would emit it anyway once end-of-stream calls it unconditionally,
     // making the stream report both an 'error' and a spurious 'data' + clean
     // 'end' for the same invalid document.
+    //
+    // `state.errored` is cleared again on `onResync` below, once JsonSaxParser
+    // recovers from that error at an NDJSON newline boundary: it exists to
+    // invalidate the specific record that failed, not every record for the
+    // rest of the stream, and a fresh record's own strValue deserves the
+    // exact same disambiguation-before-flush treatment as the first one.
     const flushPendingString = () => {
         if (!state.errored && strValue != null) {
             context.onValue(strValue);
@@ -98,6 +104,24 @@ function createSaxParser(context: StreamContext, stream: ThroughStream,
         onNull: () => {
             strValue = null;
             context.onValue(null);
+        },
+        // Fired once JsonSaxParser has abandoned a failed NDJSON record and
+        // resynced at the next newline (see JsonSaxParser's own
+        // resyncAfterError()) - i.e. after the onError above already
+        // reported that record's failure, and before any callback for the
+        // next record fires. `strValue` is discarded rather than flushed:
+        // whatever string was pending belonged to the abandoned record and,
+        // same as any other of its data, was never confirmed as a real
+        // value. `state.errored` resets so the *next* record's own pending
+        // string gets to go through flushPendingString()'s normal
+        // disambiguation instead of being silently discarded forever.
+        // context.resyncAfterError() mirrors this at the structural-position
+        // layer - see its own comment in StreamContext.ts for why `reset()`
+        // alone isn't enough here.
+        onResync: () => {
+            strValue = null;
+            state.errored = false;
+            context.resyncAfterError();
         },
         onNumber: (num) => {
             strValue = null;

@@ -178,6 +178,20 @@ export class JsonSaxParser {
   private bomChecked: boolean = false;
   private bomPending: number[] = [];
 
+  // Whether an error has ever been reported anywhere in this stream's
+  // lifetime (set once in charError()/structuralError(), alongside `state =
+  // ERROR`, and - unlike `state` itself - never cleared by resyncAfterError()
+  // below). Once true, finish()'s own "empty document" check is suppressed
+  // (see the comment there): that check exists to flag a stream that never
+  // produced any value at all, which is a meaningful signal only for a
+  // stream that was otherwise clean. After a resync, a stream that never
+  // gets another valid top-level value before EOF isn't "empty" in that
+  // sense - it already got exactly one real error, and finish() must not
+  // pile a second, misleading one on top (mirrors the ERROR-state guard at
+  // the top of finish(), extended to cover the case where `state` itself
+  // has since moved back to START via a resync).
+  private hadError: boolean = false;
+
   constructor(callback: JsonSaxParser.ICallbacks) {
     this.callbacks = callback;
     this.state = START;
@@ -336,8 +350,24 @@ export class JsonSaxParser {
     for (let i = 0, l = buffer.length; i < l; i++) {
       switch (this.state) {
       case ERROR:
-        // An unrecoverable error was already reported; ignore the rest of
-        // the input instead of continuing to interpret it.
+        // The failed document's own error was already reported; nothing
+        // read from here on is trusted as part of that document. But for
+        // NDJSON (newline-separated top-level documents - see AWAIT_DOC_*
+        // above) one malformed line must not permanently take down every
+        // later, individually-valid one. On the next newline, resync: treat
+        // it exactly like the separator it already is between two NDJSON
+        // records, abandon whatever was left of the failed document, and
+        // start fresh as if a new document begins right after it - see
+        // resyncAfterError(). Until (or unless) a newline shows up, this is
+        // byte-for-byte the original issue #5 fix: every iteration just
+        // `continue`s (i is only ever incremented by the enclosing `for`,
+        // never rewound), so forward progress through the buffer is
+        // unconditionally guaranteed and the ERROR state can never spin -
+        // resyncing out of it earlier, on a newline, only reaches that same
+        // guaranteed-forward-progress `continue` sooner, never a rewind.
+        if (buffer[i] === 0x0a) { // `\n`
+          this.resyncAfterError();
+        }
         continue;
       case START:
         n = buffer[i];
@@ -815,10 +845,48 @@ export class JsonSaxParser {
       this.callbacks.onError(new Error('Unexpected end of input stream: unclosed array/object'));
       return;
     }
-    if (this.awaiting === AWAIT_DOC_VALUE && !this.sawValue) {
+    // `!this.hadError` guards this the same way `this.state === ERROR` is
+    // guarded against above: a stream that resynced after an error (see
+    // resyncAfterError()) is back in `state === START` by the time it hits
+    // EOF, so the check above no longer catches it, but it must still not
+    // be treated as an "empty document" - it already got exactly one real
+    // error for the record that actually failed, and finish() must not
+    // pile a second, misleading one on top just because no further NDJSON
+    // record happened to arrive before the stream ended.
+    if (this.awaiting === AWAIT_DOC_VALUE && !this.sawValue && !this.hadError) {
       this.state = ERROR;
       this.callbacks.onError(new Error('Unexpected end of input stream: no data'));
     }
+  }
+
+  // Recovery point for the ERROR state's NDJSON resync (see the `case
+  // ERROR:` branch in parse() above): puts every piece of token- and
+  // structural-level state back to exactly what the constructor leaves it
+  // in, so the next byte is parsed as if a brand new JsonSaxParser had just
+  // started - abandoning anything left over from the document that failed
+  // (an open string/number token, an open array/object on structStack,
+  // etc.), which can never be trusted to mean anything once its own parse
+  // was aborted mid-way.
+  //
+  // Deliberately leaves `sawValue` and `hadError` untouched: both are
+  // whole-stream bookkeeping (has *any* top-level value ever completed; has
+  // *any* error ever been reported), not per-document state, so a resync
+  // must not reset them any more than completing an ordinary NDJSON record
+  // does.
+  private resyncAfterError(): void {
+    this.state = START;
+    this.str = undefined;
+    this.unicode = undefined;
+    this.negative = undefined;
+    this.magnatude = undefined;
+    this.position = undefined;
+    this.exponent = undefined;
+    this.negativeExponent = undefined;
+    this.tdq = false;
+    this.resetUtf8Decoder();
+    this.awaiting = AWAIT_DOC_VALUE;
+    this.structStack = [];
+    this.callbacks.onResync?.();
   }
 
   // Feeds one raw content byte from a JSON string into the UTF-8 decoder and
@@ -924,6 +992,7 @@ export class JsonSaxParser {
     }
     const stateName = toknam(this.state);
     this.state = ERROR;
+    this.hadError = true;
     this.callbacks.onError(new Error('Unexpected ' + JSON.stringify(String.
       fromCharCode(buffer[i])) + ' at position ' + i + ' in state ' + stateName));
   }
@@ -940,6 +1009,7 @@ export class JsonSaxParser {
       return;
     }
     this.state = ERROR;
+    this.hadError = true;
     this.callbacks.onError(new Error('Unexpected ' + JSON.stringify(String.
       fromCharCode(buffer[i])) + ' at position ' + i + ': expected ' + expected));
   }
@@ -958,5 +1028,23 @@ export namespace JsonSaxParser {
     onStartObject: () => void;
     onString: (str: string) => void;
     onError: (err: Error) => void;
+    // Fired once, right after resyncAfterError() puts the tokenizer itself
+    // back to a fresh-document state on an NDJSON resync (see the `case
+    // ERROR:` branch in parse()) - i.e. after onError already reported the
+    // failed record's own error, and before any callback for the next
+    // record fires. Optional (and a no-op if omitted) for backward
+    // compatibility with any existing ICallbacks implementation that
+    // predates NDJSON resync support - such a caller simply keeps the
+    // pre-resync, ERROR-is-terminal behavior it always had, since it also
+    // won't have anything of its own to reset here.
+    //
+    // A consumer that tracks its own structural state alongside the parser
+    // (as StreamContext does - see its own resyncAfterError()) needs this:
+    // JsonSaxParser resetting *its* nesting/token state is not enough to
+    // make a downstream consumer treat the next record as a fresh
+    // document if that consumer was never told the previous one got
+    // abandoned mid-parse - it would otherwise keep thinking whatever
+    // array/object the failed record left half-open is still open.
+    onResync?: () => void;
   }
 }

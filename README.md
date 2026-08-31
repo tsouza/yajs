@@ -42,6 +42,25 @@ $ cat package.json | yajs '$.author'
 "Thiago Souza <tcostasouza@gmail.com>"
 ```
 
+## NDJSON and error handling
+
+YAJS also accepts NDJSON-style input: multiple top-level JSON values, one per
+line, in a single stream. Each `data` event carries one fully-parsed
+top-level value (or a match beneath it, per the selector), and a malformed
+line reports an `error` event with that line's own parse error.
+
+Parsing resumes with the next line after a malformed one: yajs resyncs at the
+next newline, so one bad record does not take down every valid record that
+follows it in the same stream. Only that one record is lost - everything
+before and after it is still reported normally. (This is a per-record
+recovery inside the parser itself, distinct from Node's own `pipe()`
+behavior: once a stream emits `error`, `Readable#pipe()` unpipes its source
+to protect the destination, so a single-shot pipe like
+`process.stdin.pipe(yajs(...))` only benefits from this recovery for data
+already delivered to yajs in the same chunk/tick as the error - later chunks
+require re-piping, or driving the stream directly via `write()`/`parse()`
+instead of `pipe()`.)
+
 ## YAJS Selector Syntax
 
 YAJS selector syntax is jsonpath-like, yet it's **not** jsonpath.
