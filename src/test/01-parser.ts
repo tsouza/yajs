@@ -37,7 +37,12 @@ describe('path parser', () => {
             const keys = extractKeys(filter.filterExpression());
             expect(keys).to.deep.equal(['test.field1', '.field2']);
             const argsExpr = buildArgsExpression(filter.filterExpression());
-            expect(argsExpr).to.be.equal('args[\'test.field1\']&&args[\'.field2\']');
+            // Double-quoted (JSON.stringify) rather than manually
+            // single-quoted, since issue #17 - a key containing a single
+            // quote used to break out of a naive `'${key}'` string literal
+            // in this generated expression, crashing vm.runInContext with a
+            // SyntaxError instead of being treated as an ordinary key name.
+            expect(argsExpr).to.be.equal('args["test.field1"]&&args[".field2"]');
         }
     });
 

@@ -34,6 +34,10 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
 
     endArray(): boolean {
         this.doEndArray();
-        return this.isInRoot();
+        if (this.isInRoot()) {
+            this.dispatch();
+            return true;
+        }
+        return false;
     }
 }

@@ -28,7 +28,13 @@ export function buildArgsExpression(ctx: FilterExpressionContext): string {
 
 function doBuildArgsExpression(ctx: FilterExpressionTermContext, terms: string[]): void {
     if (ctx._key && ctx._key.text) {
-        terms.push(`args['${ctx._key.text}']`);
+        // JSON.stringify (not manual `'${...}'` wrapping) so a key
+        // containing a quote, backslash, or control character produces a
+        // correctly-escaped string literal instead of breaking out of it -
+        // this string is compiled as real JavaScript via vm.runInContext
+        // in ScriptFilterHelper, so unescaped interpolation here is exactly
+        // the kind of bug that leads to code injection (issue #17).
+        terms.push(`args[${JSON.stringify(ctx._key.text)}]`);
     } else if (!ctx._key && ctx.children) {
         if (ctx._op && ctx._op.text) {
             terms.push(ctx._op.text);

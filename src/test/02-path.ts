@@ -154,6 +154,31 @@ describe('path match', () => {
             expect(descendant1.match(path1)).to.equal(true);
             expect(descendant2.match(path1)).to.equal(false);
         });
+
+        // Regression tests for issue #17: a filter/project/drop-keys key
+        // containing a quote used to be interpolated unescaped into a
+        // string literal in generated JS (`args['${key}']`), so a key like
+        // "key's" broke out of the string and crashed with a raw
+        // SyntaxError at parse time instead of being treated as an ordinary
+        // key name.
+        it('should not throw when a filter key contains an apostrophe', () => {
+            expect(() => YAJSPath.parse("$..[key's]prop3")).to.not.throw();
+        });
+
+        it('should correctly match on a filter key containing an ' +
+            'apostrophe, not just avoid throwing', () => {
+            const path1 = YAJSPath.parse("$.key's.prop3");
+            const descendant = YAJSPath.parse("$..[key's]prop3");
+            expect(descendant.match(path1)).to.equal(true);
+        });
+
+        it('should not throw when a project key contains an apostrophe', () => {
+            expect(() => YAJSPath.parse("$.prop1{key's}")).to.not.throw();
+        });
+
+        it('should not throw when a drop key contains an apostrophe', () => {
+            expect(() => YAJSPath.parse("$<key's>")).to.not.throw();
+        });
     });
 
 });

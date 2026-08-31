@@ -40,19 +40,20 @@ function readUtf8(file: string): string {
     return readFileSync(`${FIXTURE_DIR}/${file}`, 'utf8');
 }
 
-// yajs streams the elements of a matched *array* one at a time rather than
-// emitting the whole array as a single value - confirmed both by the
-// existing '$.object4.object5' test in 03-yajs.ts and empirically here: a
+// yajs streams the immediate elements of a matched *array* one at a time
+// rather than emitting the whole array as a single value - confirmed both by
+// the existing '$.object4.object5' test in 03-yajs.ts and empirically here: a
 // root-level array never itself appears as an emitted `value`, only its
-// (recursively-flattened, for nested arrays) leaves do. An object, by
-// contrast, *is* emitted as one whole value wherever it's matched. This
-// mirrors what a matched value is expected to look like coming out of
-// yajs('$'), independent of any of the conformance gaps this suite found.
+// elements do. Each element is captured as one WHOLE value, whatever it is -
+// a scalar stays a scalar, an object is captured whole, and (since issue #14)
+// an array is ALSO captured whole rather than being recursively flattened
+// into its own leaves. An object (or scalar) at the top level, by contrast,
+// *is* emitted as one whole value wherever it's matched - arrays are the only
+// thing '$' iterates. This mirrors what a matched value is expected to look
+// like coming out of yajs('$'), independent of any of the conformance gaps
+// this suite found.
 function expectedValues(parsed: any): any[] {
-    if (Array.isArray(parsed)) {
-        return parsed.flatMap(expectedValues);
-    }
-    return [parsed];
+    return Array.isArray(parsed) ? parsed : [parsed];
 }
 
 // --------------------------------------------------------------------
