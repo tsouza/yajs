@@ -5,7 +5,8 @@ import { ChildNode } from './operator/ChildNode';
 import { Descendant } from './operator/Descendant';
 import { Root } from './operator/Root';
 import { Wildcard } from './operator/Wildcard';
-import { assertFlatKeyExpression, buildArgsExpression, extractKeys } from './parser/utils';
+import { assertFlatKeyExpression, assertProjectAndDropKeysNotCombined,
+    buildArgsExpression, extractKeys } from './parser/utils';
 import { YAJSLexer } from './parser/YAJSLexer';
 import { ActionDropKeysContext, ActionProjectContext,
     PathStepContext, YAJSParser } from './parser/YAJSParser';
@@ -453,6 +454,8 @@ export namespace YAJSPath {
     }
 
     export function parse(path: string): YAJSPath {
+
+        assertProjectAndDropKeysNotCombined(path);
 
         const inputStream = new ANTLRInputStream(path);
         const lexer = new YAJSLexer(inputStream);

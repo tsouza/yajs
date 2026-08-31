@@ -778,4 +778,34 @@ describe('path match', () => {
         });
     });
 
+    // Regression tests for GitHub issue #52: pathLeaf's own grammar rule
+    // (`pathLeaf: actionProject | actionDropKeys`) already makes project
+    // (`{...}`) and drop-keys (`<...>`) mutually exclusive - a selector may
+    // end in at most one of them - but writing both anyway (e.g.
+    // `$.a{x}<y>`) used to surface as a raw, internal ANTLR message
+    // ("mismatched input '<' expecting <EOF>") rather than a clear one, since
+    // pathLeaf just matches whichever comes first and the second is left as
+    // unconsumed trailing input that only fails once EOF is expected.
+    // YAJSPath.parse() now rejects this combination up front with a
+    // purpose-built message, the same pattern issue #29 established above
+    // for drop-keys' own boolean-operator restriction.
+    describe('project and drop-keys combined (issue #52)', () => {
+
+        it('throws a clear error for project followed by drop-keys', () => {
+            expect(() => YAJSPath.parse('$.a{x}<y>')).to.throw(/mutually exclusive/);
+        });
+
+        it('throws a clear error for drop-keys followed by project', () => {
+            expect(() => YAJSPath.parse('$.a<y>{x}')).to.throw(/mutually exclusive/);
+        });
+
+        it('still accepts project alone (must not regress)', () => {
+            expect(() => YAJSPath.parse('$.a{x}')).to.not.throw();
+        });
+
+        it('still accepts drop-keys alone (must not regress)', () => {
+            expect(() => YAJSPath.parse('$.a<y>')).to.not.throw();
+        });
+    });
+
 });

@@ -143,6 +143,38 @@ export function assertFlatKeyExpression(ctx: FilterExpressionContext): void {
     }
 }
 
+// Issue #52: pathLeaf's own grammar rule (`pathLeaf: actionProject |
+// actionDropKeys` - see YAJS.g4) already makes project (`{...}`) and
+// drop-keys (`<...>`) mutually exclusive: a selector may end in at most one
+// of them. But when a selector nevertheless writes both (e.g. `$.a{x}<y>`),
+// there's no grammar rule for "this specific illegal combination" - pathLeaf
+// just matches whichever one comes first (here, actionProject), leaving the
+// second one as unconsumed trailing input that only fails once the parser
+// reaches EOF and finds it still there. That surfaces as a raw, internal
+// ANTLR message ("mismatched input '<' expecting <EOF>") that never says
+// WHY the selector is invalid - unlike the purpose-built message issue #29
+// added for drop-keys' own boolean-operator restriction (see
+// assertFlatKeyExpression above). This is the equivalent purpose-built check
+// for the project/drop-keys combination.
+//
+// `{`, `}`, `<`, `>` are reserved structural characters excluded from both
+// Identifier's and FilterExpressionTerm's character classes (see YAJS.g4),
+// so they can only ever appear as actionProject/actionDropKeys' own LB/RB/
+// LT/GT delimiters - never inside a key name, a filter value, or anywhere
+// else a selector's own content can legitimately place them. That makes a
+// plain substring check on the raw, unparsed selector safe: if both a `{`
+// and a `<` appear anywhere in it, the selector necessarily attempts to use
+// both project and drop-keys, and it's rejected here - before parsing -
+// with a message that names the actual constraint instead of an internal
+// ANTLR token diff.
+export function assertProjectAndDropKeysNotCombined(path: string): void {
+    if (path.indexOf('{') !== -1 && path.indexOf('<') !== -1) {
+        throw new Error(
+            'A selector can\'t combine project ({...}) and drop-keys (<...>) - ' +
+            'they are mutually exclusive; use only one of them.');
+    }
+}
+
 export function buildArgsExpression(ctx: FilterExpressionContext): string {
     return renderExpression(ctx);
 }
