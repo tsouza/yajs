@@ -1,4 +1,3 @@
-import { isEmpty, pick } from 'lodash';
 import { ScriptFilterHelper } from '../utils/ScriptFilterHelper';
 import { AbstractObjectBuilder } from './AbstractObjectBuilder';
 

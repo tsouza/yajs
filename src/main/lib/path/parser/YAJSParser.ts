@@ -1,4 +1,10 @@
 // Generated from src/main/lib/path/parser/YAJS.g4 by ANTLR 4.6-SNAPSHOT
+// This file is ANTLR-generated (see `npm run antlr`) and not hand-maintained.
+// It predates the antlr4ts typings' switch of `ruleIndex`/`serializedATN` from
+// plain properties to accessors, so it is intentionally skipped by the type
+// checker rather than hand-edited to match. Do not add new hand-written logic
+// here - regenerate from src/main/lib/path/parser/YAJS.g4 instead.
+// @ts-nocheck
 
 
 import { ATN } from 'antlr4ts/atn/ATN';

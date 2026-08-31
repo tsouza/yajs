@@ -1,7 +1,11 @@
 import { FilterExpressionContext, FilterExpressionTermContext } from './YAJSParser';
 
 export function extractKeys(ctx: FilterExpressionContext): string[] {
-    const result = {};
+    // Use a null-prototype object so that a key named "__proto__" becomes a
+    // real own property instead of being routed through Object.prototype's
+    // inherited __proto__ setter (which would silently mutate the object's
+    // prototype chain instead of registering the key).
+    const result = Object.create(null);
     ctx.filterExpressionTerm().forEach((c: FilterExpressionTermContext) => doExtractKeys(c, result));
     return Object.keys(result);
 }

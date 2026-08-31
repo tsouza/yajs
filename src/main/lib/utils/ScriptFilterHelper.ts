@@ -5,7 +5,6 @@ const context = createContext();
 
 export class ScriptFilterHelper {
 
-    private expression?: string;
     private keys: string[];
 
     private filter?: (args: object) => boolean;
@@ -29,7 +28,13 @@ export class ScriptFilterHelper {
     }
 
     private _createArgs(keyVerifier: (key) => boolean): object {
-        const args = {};
+        // Use a null-prototype object so that a key named "__proto__" becomes a
+        // real own property instead of being routed through Object.prototype's
+        // inherited __proto__ setter, which would otherwise silently mutate this
+        // object's prototype chain instead of storing the key's verification
+        // result (and cause a bracket-notation read of args['__proto__'] to
+        // always return a truthy prototype object regardless of keyVerifier).
+        const args = Object.create(null);
         if (this.keys) {
             this.keys.forEach((key) =>
                 args[key] = keyVerifier(key));

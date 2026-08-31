@@ -1,12 +1,10 @@
-/* tslint-env mocha */
-
 import { ANTLRInputStream, CommonTokenStream } from 'antlr4ts';
 
 import { buildArgsExpression, extractKeys } from '../main/lib/path/parser/utils';
 import { YAJSLexer } from '../main/lib/path/parser/YAJSLexer';
 import { YAJSParser } from '../main/lib/path/parser/YAJSParser';
 
-import { expect } from 'chai';
+import { describe, expect, it } from 'vitest';
 
 describe('path parser', () => {
 
@@ -14,7 +12,6 @@ describe('path parser', () => {
         const parser = createParser('$');
         const path = parser.path();
 
-        // tslint:disable-next-line:no-unused-expression
         expect(path.ROOT()).to.exist;
     });
 
@@ -23,9 +20,7 @@ describe('path parser', () => {
         const path = parser.path();
 
         expect(path.pathStep()).to.have.lengthOf(1);
-        // tslint:disable-next-line:no-unused-expression
         expect(path.pathStep()[0].DOT()).to.exist;
-        // tslint:disable-next-line:no-unused-expression
         expect(path.pathStep()[0].actionField()).to.exist;
         expect(path.pathStep()[0].actionField()._key.text).to.equal('test');
     });
@@ -35,7 +30,6 @@ describe('path parser', () => {
         const path = parser.path();
 
         expect(path.pathStep()).to.have.lengthOf(1);
-        // tslint:disable-next-line:no-unused-expression
         expect(path.pathStep()[0].actionFilter()).to.exist;
         const filter = path.pathStep()[0].actionFilter();
         if (filter) {
@@ -51,9 +45,7 @@ describe('path parser', () => {
         const parser = createParser('$.test{field1 && field2}');
         const path = parser.path();
 
-        // tslint:disable-next-line:no-unused-expression
         expect(path.pathLeaf()).to.exist;
-        // tslint:disable-next-line:no-unused-expression
         expect(path.pathLeaf().actionProject()).to.exist;
         const projection = path.pathLeaf().actionProject();
         if (projection) {
