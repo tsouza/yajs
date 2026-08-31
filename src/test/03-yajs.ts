@@ -1,18 +1,15 @@
-/* tslint-env mocha */
 
-import { all } from 'bluebird';
-import { expect } from 'chai';
 import { createReadStream } from 'fs';
+import { describe, expect, it } from 'vitest';
 
 import yajs from '../main/yajs';
 
 describe('yajs', () => {
 
     it('should parse simple json', () =>
-        all([test('simple', '$').then((r) => r[0]),
+        Promise.all([test('simple', '$').then((r) => r[0]),
             toString('simple').then((j) => JSON.parse(j))]).
-            spread((actual: any, expected: any) => {
-                // tslint:disable-next-line:no-unused-expression
+            then(([actual, expected]: [any, any]) => {
                 expect(actual.path).to.be.empty;
                 expect(actual.value).to.be.deep.equal(expected);
             }));
@@ -20,7 +17,6 @@ describe('yajs', () => {
     it('should parse triple double quotes json', () =>
         test('triple-dquotes', '$').then((r) => r[0]).
         then((actual: any) => {
-            // tslint:disable-next-line:no-unused-expression
             expect(actual.path).to.be.empty;
             expect(actual.value).to.be.deep.equal({
                 test1: '',
@@ -31,14 +27,13 @@ describe('yajs', () => {
     }));
 
     it('should parse ndjson', () =>
-        all([test('ndjson', '$'),
+        Promise.all([test('ndjson', '$'),
             toString('ndjson').then((j) => j.
                 split('\n').filter((l) => l.length).
                 map((l) => JSON.parse(l)))]).
-            spread((actual: any, expected: any[]) => {
+            then(([actual, expected]: [any[], any[]]) => {
                 expect(actual).to.lengthOf(4);
                 actual.forEach((entry: any, idx: number) => {
-                    // tslint:disable-next-line:no-unused-expression
                     expect(entry.path).to.be.empty;
                     expect(entry.value).to.be.deep.equal(expected[idx]);
                 });
@@ -87,6 +82,32 @@ describe('yajs', () => {
                 array.forEach((entry) => expect(entry).to.be.deep.equal({
                     path: [], value: { num: [ 6, 1 ] } }));
             }));
+
+    it('should parse bare strings at the root', () =>
+        test('string', '$').then((array) => {
+            expect(array).to.be.lengthOf(2);
+            expect(array[0]).to.be.deep.equal({ path: [], value: 'a' });
+            expect(array[1]).to.be.deep.equal({ path: [], value: 'b' });
+        }));
+
+    it('should parse a bare number at the root', () =>
+        test('number', '$').then((array) => {
+            expect(array).to.be.lengthOf(1);
+            expect(array[0]).to.be.deep.equal({ path: [], value: 42 });
+        }));
+
+    it('should parse bare booleans at the root', () =>
+        test('boolean', '$').then((array) => {
+            expect(array).to.be.lengthOf(2);
+            expect(array[0]).to.be.deep.equal({ path: [], value: true });
+            expect(array[1]).to.be.deep.equal({ path: [], value: false });
+        }));
+
+    it('should parse a bare null at the root', () =>
+        test('null', '$').then((array) => {
+            expect(array).to.be.lengthOf(1);
+            expect(array[0]).to.be.deep.equal({ path: [], value: null });
+        }));
 
     it('should include array index in path', () =>
         test('array-index', '$..path1', true).

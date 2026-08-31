@@ -52,6 +52,10 @@ const TDQSTR3 = C.TDQSTR3 = 0x73;
 const TDQSTR4 = C.TDQSTR4 = 0x74;
 const TDQSTR5 = C.TDQSTR5 = 0x75;
 const TDQSTR6 = C.TDQSTR6 = 0x76;
+// Terminal state entered after an unrecoverable parse error. Once here, the
+// parser stops interpreting further bytes (no more callbacks fire) instead
+// of falling through into whatever case happens to follow textually.
+const ERROR   = C.ERROR   = 0x91;
 
 // Slow code to string converter (only used when throwing syntax errors)
 function toknam(code) {
@@ -68,7 +72,6 @@ export class JsonSaxParser {
   private callbacks: JsonSaxParser.ICallbacks;
 
   private mState: number;
-  private lastState: number;
   private str: string;
   private unicode: string;
   private negative: boolean;
@@ -76,6 +79,12 @@ export class JsonSaxParser {
   private position: number;
   private exponent: number;
   private negativeExponent: boolean;
+  // Whether the string currently being parsed opened as a triple-double-quote
+  // (`"""`) string. Must persist as instance state (not a local in parse())
+  // because a chunk boundary can land anywhere inside a TDQSTR body - a
+  // local variable would silently reset to false on the next write() call,
+  // corrupting parsing of any triple-quoted string that spans a chunk split.
+  private tdq: boolean = false;
 
   constructor(callback: JsonSaxParser.ICallbacks) {
     this.callbacks = callback;
@@ -87,15 +96,17 @@ export class JsonSaxParser {
   }
 
   private set state(state: number) {
-    this.lastState = this.mState;
     this.mState = state;
   }
 
   parse(buffer: Buffer) {
     let n;
-    let tdq = false;
     for (let i = 0, l = buffer.length; i < l; i++) {
       switch (this.state) {
+      case ERROR:
+        // An unrecoverable error was already reported; ignore the rest of
+        // the input instead of continuing to interpret it.
+        continue;
       case START:
         n = buffer[i];
         switch (n) {
@@ -148,6 +159,7 @@ export class JsonSaxParser {
           continue; // whitespace
         }
         this.charError(buffer, i);
+        continue;
       case TDQSTR1:
         n = buffer[i];
         if (n !== 0x22) {
@@ -165,7 +177,7 @@ export class JsonSaxParser {
           this.str = undefined;
           this.state = START;
         } else {
-          tdq = true;
+          this.tdq = true;
           this.state = STRING1;
         }
         continue;
@@ -185,7 +197,7 @@ export class JsonSaxParser {
         continue;
       case TDQSTR6:
         i--;
-        tdq = false;
+        this.tdq = false;
         this.callbacks.onString(this.str);
         this.str = undefined;
         this.state = START;
@@ -194,28 +206,30 @@ export class JsonSaxParser {
         n = buffer[i];
         switch (n) {
         case 0x22: // `"`
-          if (!tdq) {
+          if (!this.tdq) {
             this.callbacks.onString(this.str);
             this.str = undefined;
             this.state = START;
             continue;
-          } else if (tdq) {
+          } else if (this.tdq) {
             i--;
             this.state = TDQSTR3;
             continue;
           }
           this.charError(buffer, i);
+          continue;
         case 0x5c: // `\`
-          if (!tdq) {
+          if (!this.tdq) {
             this.state = STRING2;
             continue;
           }
         }
-        if (n >= 0x20 || ((n === 13 || n === 10) && tdq)) {
+        if (n >= 0x20 || ((n === 13 || n === 10) && this.tdq)) {
           this.str += String.fromCharCode(n);
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case STRING2: // After backslash
         n = buffer[i];
         switch (n) {
@@ -230,6 +244,7 @@ export class JsonSaxParser {
         case 0x75: this.unicode = ''; this.state = STRING3; continue;
         }
         this.charError(buffer, i);
+        continue;
       case STRING3: case STRING4: case STRING5: case STRING6: // unicode hex codes
         n = buffer[i];
         // 0-9 A-F a-f
@@ -243,6 +258,7 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NUMBER1: // after minus
         n = buffer[i];
         if (n === 0x30) { // `0`
@@ -256,6 +272,7 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NUMBER2: // * After initial zero
         switch (buffer[i]) {
         case 0x2e: // .
@@ -290,6 +307,7 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NUMBER5: // * After digit (after period)
         n = buffer[i];
         if (n >= 0x30 && n < 0x40) { // 0-9
@@ -318,6 +336,7 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NUMBER7: // After +/-
         n = buffer[i];
         if (n >= 0x30 && n < 0x40) { // 0-9
@@ -326,6 +345,7 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NUMBER8: // * After digit (after +/-)
         n = buffer[i];
         if (n >= 0x30 && n < 0x40) { // 0-9
@@ -341,12 +361,14 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case TRUE2: // u
         if (buffer[i] === 0x75) {
           this.state = TRUE3;
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case TRUE3: // e
         if (buffer[i] === 0x65) {
           this.state = START;
@@ -354,24 +376,28 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case FALSE1: // a
         if (buffer[i] === 0x61) {
           this.state = FALSE2;
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case FALSE2: // l
         if (buffer[i] === 0x6c) {
           this.state = FALSE3;
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case FALSE3: // s
         if (buffer[i] === 0x73) {
           this.state = FALSE4;
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case FALSE4: // e
         if (buffer[i] === 0x65) {
           this.state = START;
@@ -379,18 +405,21 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NULL1: // u
         if (buffer[i] === 0x75) {
           this.state = NULL2;
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NULL2: // l
         if (buffer[i] === 0x6c) {
           this.state = NULL3;
           continue;
         }
         this.charError(buffer, i);
+        continue;
       case NULL3: // l
         if (buffer[i] === 0x6c) {
           this.state = START;
@@ -398,11 +427,17 @@ export class JsonSaxParser {
           continue;
         }
         this.charError(buffer, i);
+        continue;
       }
     }
   }
 
   finish() {
+    if (this.state === ERROR) {
+      // The single onError for the actual failure was already emitted;
+      // don't also report a misleading "end of input" error on top of it.
+      return;
+    }
     switch (this.state) {
     case NUMBER2: // * After initial zero
       this.callbacks.onNumber(0);
@@ -451,8 +486,14 @@ export class JsonSaxParser {
   }
 
   private charError(buffer: Buffer, i: number): void {
+    if (this.state === ERROR) {
+      // Already reported; never emit a second error for the same failure.
+      return;
+    }
+    const stateName = toknam(this.state);
+    this.state = ERROR;
     this.callbacks.onError(new Error('Unexpected ' + JSON.stringify(String.
-      fromCharCode(buffer[i])) + ' at position ' + i + ' in state ' + toknam(this.state)));
+      fromCharCode(buffer[i])) + ' at position ' + i + ' in state ' + stateName));
   }
 }
 

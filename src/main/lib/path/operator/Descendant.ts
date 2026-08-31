@@ -2,7 +2,7 @@ import { PathOperator } from '../PathOperator';
 
 export class Descendant extends PathOperator {
 
-    match(operator: PathOperator): boolean {
+    match(_operator: PathOperator): boolean {
         return true;
     }
 

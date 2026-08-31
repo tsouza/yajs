@@ -6,7 +6,6 @@ export class Root extends PathOperator {
         return PathOperator.Type.ROOT;
     }
 
-    // tslint:disable-next-line:no-empty
-    onValue(delegateOnMatch: () => void): void {
+    onValue(_delegateOnMatch: () => void): void {
     }
 }

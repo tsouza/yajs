@@ -5,7 +5,6 @@ const context = createContext();
 
 export class ScriptFilterHelper {
 
-    private expression?: string;
     private keys: string[];
 
     private filter?: (args: object) => boolean;

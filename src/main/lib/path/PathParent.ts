@@ -1,4 +1,3 @@
-import { ChildNode } from './operator/ChildNode';
 import { PathOperator } from './PathOperator';
 
 export class PathParent {

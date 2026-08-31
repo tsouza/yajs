@@ -1,6 +1,5 @@
 import { isEmpty } from 'lodash';
 import { ObjectDispatcher } from '../dispatcher/ObjectDispatcher';
-import { PathOperator } from '../path/PathOperator';
 import { YAJSPath } from '../path/YAJSPath';
 import { StreamPosition } from './StreamPosition';
 
@@ -26,9 +25,9 @@ export class StreamContext {
             (value) => this.doOnValue(value) : (value) => value;
     }
 
-    reset(): void {
+    reset(value?: any): void {
         this.position = new StreamPosition();
-        this.match();
+        this.match(value);
     }
 
     startObject(): void {
@@ -73,8 +72,15 @@ export class StreamContext {
     }
 
     onValue(value: any): void {
-        this.position.increaseArrayIndex();
-        this.onValueListener(value);
+        // A bare scalar (number/string/boolean/null) at the document root fires
+        // onValue() directly - unlike objects/arrays, no startObject()/startArray()
+        // ever runs first to initialize the position, so it must be handled here.
+        if (this.isInRoot()) {
+            this.reset(value);
+        } else {
+            this.position.increaseArrayIndex();
+            this.onValueListener(value);
+        }
         this.dispatch((dispatcher) => {
             dispatcher.onValue(value);
             return false;

@@ -117,6 +117,7 @@ For bugs, questions and discussions please use the [Github Issues](https://githu
 
 * Thanks to [wanglingsong](https://github.com/wanglingsong) for his awesome work with [JsonSurfer](https://github.com/jsurfer/JsonSurfer) which inspired me to create YAJS.
 * Thanks to [creationix](https://github.com/creationix) for his crazy fast [sax-based json parser](https://gist.github.com/creationix/1821394).
+* Thanks to [Nicolas Seriot](https://github.com/nst) for [JSONTestSuite](https://github.com/nst/JSONTestSuite), used as this project's JSON conformance test corpus.
 
 ## LICENSE
 

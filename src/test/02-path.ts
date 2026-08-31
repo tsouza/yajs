@@ -1,6 +1,4 @@
-/* tslint-env mocha */
-
-import { expect } from 'chai';
+import { describe, expect, it } from 'vitest';
 import { YAJSPath } from '../main/lib/path/YAJSPath';
 
 describe('path match', () => {

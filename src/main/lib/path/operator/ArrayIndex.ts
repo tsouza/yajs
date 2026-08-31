@@ -13,7 +13,7 @@ export class ArrayIndex extends PathOperator {
         return PathOperator.Type.ARRAY;
     }
 
-    match(pathOperator: PathOperator): boolean {
+    match(_pathOperator: PathOperator): boolean {
         return true;
     }
 }

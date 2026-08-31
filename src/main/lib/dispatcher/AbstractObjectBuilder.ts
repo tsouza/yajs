@@ -119,7 +119,7 @@ class ArrayNode implements IJsonNode {
         this.value = value;
     }
 
-    handle(value: any, builder: AbstractObjectBuilder): void {
+    handle(value: any): void {
         (this.value as any[]).push(value);
     }
 }
