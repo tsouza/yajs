@@ -230,6 +230,76 @@ describe('path match', () => {
         });
     });
 
+    // Regression tests for GitHub issue #45: YAJSPath.match()'s DESCENDANT
+    // branch used to commit to the NEAREST ancestor satisfying the pattern
+    // operator preceding '..' (prevScan) and just carry on matching the rest
+    // of the pattern from there, with no way to reconsider that choice. When
+    // the sought key recurs at more than one ancestor depth, the nearest
+    // occurrence isn't necessarily the one the REST of the pattern (further
+    // out - e.g. a leading Root, which only ever sits directly above a
+    // top-level key) can actually match against - so a real, in-document
+    // match was silently missed whenever the nearest candidate didn't pan
+    // out, instead of backtracking to try the next-farthest one. Fixed by
+    // having the DESCENDANT branch try each candidate ancestor, nearest
+    // first, recursively verifying the remaining pattern against it and
+    // backtracking to the next-farthest one on failure.
+    describe('descendant backtracking across repeated ancestor keys (issue #45)', () => {
+
+        it('backtracks past a closer non-qualifying "a" to the outer, qualifying one (own repro: $.a..x vs {"a":{"c":{"a":{"x":1}}}})', () => {
+            const pattern = YAJSPath.parse('$.a..x');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('c').
+                addChild('a').
+                addChild('x').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still backtracks correctly with more intervening depth between the two "a" occurrences (adversarial)', () => {
+            const pattern = YAJSPath.parse('$.a..x');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('c1').
+                addChild('c2').
+                addChild('c3').
+                addChild('a').
+                addChild('x').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still correctly rejects when the qualifying key never occurs at the depth the rest of the pattern needs, even though a closer, non-qualifying occurrence exists (must not become a false positive)', () => {
+            const pattern = YAJSPath.parse('$.a..x');
+
+            // "a" here is only ever nested under "c" - never a direct child
+            // of root - so no candidate should ever let the pattern's
+            // leading Root match what sits above it.
+            const position = new YAJSPath.Builder().
+                addChild('c').
+                addChild('a').
+                addChild('x').
+                build();
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still matches when only the single, nearer "a" is present (regression guard - not everything needs backtracking)', () => {
+            const pattern = YAJSPath.parse('$.a..x');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('x').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+    });
+
     // Regression tests for GitHub issue #28: once YAJSPath.match()'s
     // array-transparency loop let a pattern's Wildcard pass one array
     // boundary, Wildcard.match() being unconditionally true (issue #20)

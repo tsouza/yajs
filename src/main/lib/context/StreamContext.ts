@@ -1,4 +1,3 @@
-import { isEmpty } from 'lodash';
 import { ObjectDispatcher } from '../dispatcher/ObjectDispatcher';
 import { PathOperator } from '../path/PathOperator';
 import { YAJSPath } from '../path/YAJSPath';
@@ -37,7 +36,6 @@ export class StreamContext {
     private dispatcher: ObjectDispatcher;
 
     private readonly onMatchListener: (value?: any) => void;
-    private readonly onValueListener: (value: any) => any;
     private readonly onErrorListener: (err: Error) => void;
 
     // Set once a structural error (e.g. a closing bracket with nothing open
@@ -71,9 +69,6 @@ export class StreamContext {
 
         this.onMatchListener = (value?: any) =>
             onMatch(this.position.path(pathIncludeArrayIndex), value);
-
-        this.onValueListener = isEmpty(path.projectExpression) ?
-            (value) => this.doOnValue(value) : (value) => value;
     }
 
     reset(value?: any): void {
@@ -231,7 +226,23 @@ export class StreamContext {
             }
         } else {
             this.position.increaseArrayIndex();
-            this.onValueListener(value);
+            // Issue #46: this used to be gated on `isEmpty(path.projectExpression)`
+            // - i.e. it only ever attempted a match for a scalar at all when the
+            // path had no `{...}` project clause, on the (incorrect) assumption
+            // that a projected path's match target is always an object (there's
+            // nothing to project keys out of a scalar, but that doesn't mean a
+            // scalar can never BE the matched value at a projected path - e.g.
+            // "$.a{x}" against {"a":5}, where "a" is genuinely the whole match).
+            // That assumption silently dropped exactly that case: the value
+            // simply vanished, with no match attempted and nothing emitted.
+            // doOnValue() below always attempts the match unconditionally; when
+            // it succeeds for a scalar, match() (see its own `value !== undefined`
+            // branch) delivers the scalar straight to onMatchListener(), bypassing
+            // ObjectDispatcher/the project-keys filter entirely - which is exactly
+            // the right behavior here, since "project properties out of an
+            // object" has no defined meaning for a scalar value in the first
+            // place.
+            this.doOnValue(value);
         }
         this.dispatch((dispatcher) => {
             dispatcher.onValue(value);

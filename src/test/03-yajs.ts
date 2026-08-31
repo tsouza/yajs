@@ -345,6 +345,59 @@ describe('yajs', () => {
         });
     });
 
+    // Regression tests for GitHub issue #46: StreamContext used to gate
+    // scalar matching entirely on `isEmpty(path.projectExpression)` - i.e.
+    // it only ever attempted to match a scalar value against the path at
+    // all when there was no `{...}` project clause, on the assumption that
+    // a projected path's match target is always an object (there's nothing
+    // to project/gate-on-keys-of for a scalar). That assumption doesn't
+    // hold: a scalar can still genuinely BE the whole matched value at a
+    // projected path (e.g. "$.a{x}" against {"a":5} - "a" is the match, and
+    // it happens to be a number). The old code silently dropped that case
+    // entirely - no match attempted, nothing emitted, no error. Since
+    // "project/gate on properties" has no defined meaning for a scalar in
+    // the first place, the fix makes a matched scalar always bypass the
+    // project/filter check and get emitted as-is, exactly as it already
+    // does for a plain (non-projected) path.
+    describe('project syntax {...} on a scalar match (issue #46)', () => {
+
+        it('emits the scalar unprojected instead of silently dropping it (own repro: $.a{x} vs {"a":5})', () =>
+            testJson('{"a":5}', '$.a{x}').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: ['a'], value: 5 } ]);
+            }));
+
+        it('still gates on key presence for an object match (must not regress - object case is unaffected)', () =>
+            testJson('{"a":{"x":1,"y":2}}', '$.a{x}').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([{ x: 1, y: 2 }]);
+            }));
+
+        it('still matches a plain (non-projected) scalar path (regression guard - $.a vs {"a":5})', () =>
+            testJson('{"a":5}', '$.a').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([5]);
+            }));
+
+        it('emits a string scalar unprojected', () =>
+            testJson('{"a":"str"}', '$.a{x}').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal(['str']);
+            }));
+
+        it('emits a null scalar unprojected, not confusing it with "no match"', () =>
+            testJson('{"a":null}', '$.a{x}').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([null]);
+            }));
+
+        it('emits a boolean scalar unprojected', () =>
+            testJson('{"a":true}', '$.a{x}').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([true]);
+            }));
+
+        it('does not spuriously match an unrelated sibling scalar (sanity - $.a{x} vs {"a":{"x":1},"b":2})', () =>
+            testJson('{"a":{"x":1},"b":2}', '$.a{x}').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([{ x: 1 }]);
+            }));
+    });
+
     // Regression tests for GitHub issue #35: a deeply parenthesized filter
     // expression used to overflow the JS call stack (uncaught RangeError)
     // straight out of the synchronous yajs() call, at a nesting depth of
@@ -555,6 +608,33 @@ describe('yajs', () => {
         it('finds a match past two consecutive nested arrays (adversarial)', () =>
             testJson('{"a":[[{"c":1}]]}', '$.a..c').then((array) => {
                 expect(array.map((e) => e.value)).to.deep.equal([1]);
+            }));
+    });
+
+    // Regression tests for GitHub issue #45: a descendant scan following a
+    // named key ('$.a..x') used to commit to the NEAREST ancestor "a" and
+    // never reconsider that choice, so a real match nested under a FARTHER
+    // "a" (with a closer, non-qualifying "a" in between) was silently
+    // missed whenever the nearer one didn't ultimately pan out against the
+    // rest of the pattern. See 02-path.ts for the detailed root-cause
+    // writeup and unit tests directly on YAJSPath.match(); these confirm
+    // the fix end-to-end.
+    describe('descendant backtracking across repeated ancestor keys (issue #45)', () => {
+
+        it('backtracks past a closer non-qualifying "a" to the outer, qualifying one (own repro: $.a..x vs {"a":{"c":{"a":{"x":1}}}})', () =>
+            testJson('{"a":{"c":{"a":{"x":1}}}}', '$.a..x').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: ['a', 'c', 'a', 'x'], value: 1 } ]);
+            }));
+
+        it('still matches when only a single "a" is present (regression guard)', () =>
+            testJson('{"a":{"x":1}}', '$.a..x').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1]);
+            }));
+
+        it('still correctly finds no match when "a" only ever occurs nested, never as a direct child of root (must not become a false positive)', () =>
+            testJson('{"c":{"a":{"x":1}}}', '$.a..x').then((array) => {
+                expect(array).to.be.lengthOf(0);
             }));
     });
 
