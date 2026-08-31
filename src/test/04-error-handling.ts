@@ -1,6 +1,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import yajs from '../main/yajs';
 import { runSettled } from './helpers/runSettled';
 
 // Regression tests for https://github.com/tsouza/yajs/issues/5 ("infinity loop").
@@ -107,6 +108,92 @@ describe('no stale data emitted after an error (found reviewing issue #9)', () =
                     to.have.lengthOf(1);
                 expect(result.values, JSON.stringify(result.values)).to.have.lengthOf(0);
             }), 2000);
+});
+
+// Regression tests for https://github.com/tsouza/yajs/issues/50 ("NDJSON:
+// one malformed document permanently and silently drops all subsequent
+// valid documents").
+//
+// JsonSaxParser's ERROR state (see issue #5 above) used to be permanently
+// terminal: once entered, every remaining byte was a no-op forever,
+// regardless of how many more, individually-valid, NDJSON records followed
+// the one that failed. Fixed by resyncing at the next newline after an
+// error - see resyncAfterError() in JsonSaxParser.ts (and its counterpart
+// in StreamContext.ts, invoked via the new onResync callback) - which
+// abandons whatever was left of the failed record and starts tokenizing
+// the next one as a fresh top-level document, while still guaranteeing the
+// same forward-progress invariant issue #5's fix relies on (the ERROR case
+// in parse()'s main loop never rewinds `i`, so it can never spin).
+describe('NDJSON resyncs after a malformed record instead of dropping ' +
+    'every later one (issue #50)', () => {
+
+    it('should report the one bad record\'s error and still deliver every ' +
+        'valid record after it, not go silent (issue\'s own repro)', () =>
+        runSettled(`${__dirname}/stream-tests/error-ndjson-resync.json`).
+            then((result) => {
+                expect(result.errors, result.errors.map((e) => e.message).join('; ')).
+                    to.have.lengthOf(1);
+                expect(result.errors[0].message).to.match(/Unexpected/);
+                expect(result.values.map((v: any) => v.value)).to.deep.equal([{ n: 1 }, { n: 3 }, { n: 4 }]);
+            }), 2000);
+
+    it('should recover even when the very first record is the malformed ' +
+        'one', () =>
+        runSettled(`${__dirname}/stream-tests/error-ndjson-resync-leading.json`).
+            then((result) => {
+                expect(result.errors, result.errors.map((e) => e.message).join('; ')).
+                    to.have.lengthOf(1);
+                expect(result.values.map((v: any) => v.value)).to.deep.equal([{ n: 2 }, { n: 3 }]);
+            }), 2000);
+
+    it('should resync correctly when a malformed record and a following ' +
+        'valid one straddle a chunk boundary', () => {
+        const values: any[] = [];
+        const errors: Error[] = [];
+        return new Promise<void>((resolve) => {
+            const stream = yajs('$');
+            stream.
+                on('data', (d: any) => values.push(d.value)).
+                on('error', (err: Error) => errors.push(err)).
+                on('end', resolve);
+            stream.write(Buffer.from('{"n":1}\n{"n":0'));
+            stream.write(Buffer.from('2}\n{"n":3}\n'));
+            stream.end();
+        }).then(() => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(values).to.deep.equal([{ n: 1 }, { n: 3 }]);
+        });
+    }, 2000);
+
+    // Single-document (non-NDJSON) behavior must be exactly unchanged: with
+    // no newline anywhere after the error, there is no resync point, so the
+    // ERROR state stays terminal exactly as issue #5 originally made it -
+    // one error, nothing else, no hang.
+    it('should still leave a single malformed document (no trailing ' +
+        'newline) with exactly one error and no data', () =>
+        runSettled(`${__dirname}/stream-tests/error-truncated-number.json`).
+            then((result) => {
+                expect(result.errors).to.have.lengthOf(1);
+                expect(result.values).to.have.lengthOf(0);
+            }), 2000);
+
+    it('should still leave a single malformed document with a trailing ' +
+        'newline (nothing after it) with exactly one error and no data, ' +
+        'not a second spurious "no data" error', () => {
+        const values: any[] = [];
+        const errors: Error[] = [];
+        return new Promise<void>((resolve) => {
+            const stream = yajs('$');
+            stream.
+                on('data', (d: any) => values.push(d.value)).
+                on('error', (err: Error) => errors.push(err)).
+                on('end', resolve);
+            stream.end(Buffer.from('{"n":02}\n'));
+        }).then(() => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(values).to.have.lengthOf(0);
+        });
+    }, 2000);
 });
 
 // Regression test for https://github.com/tsouza/yajs/issues/8 ("OOM crash

@@ -84,6 +84,34 @@ export class StreamContext {
         this.match(value);
     }
 
+    // Counterpart to JsonSaxParser's own resyncAfterError() (see its
+    // JsonSaxParser.ts field/method comments) - invoked via the parser's
+    // onResync callback once it recovers from its terminal ERROR state at
+    // an NDJSON newline boundary and starts tokenizing a fresh top-level
+    // document. reset() alone is not enough here: reset() only replaces
+    // `position`, on the assumption that whatever container was open
+    // before it closed normally - exactly the assumption that does NOT
+    // hold for the record the parser just abandoned mid-parse. Without
+    // also unwinding `openContainers`/`dispatcher`/`dispatchers`/`errored`,
+    // startObject()/startArray()/onValue() for the next record would still
+    // see a non-ROOT `position` (left mid-way through the abandoned
+    // record's nesting) and wrongly treat it as a descendant of that dead
+    // record instead of a fresh document - silently losing every match
+    // from then on, exactly the bug this method exists to prevent.
+    // Resetting `position` to undefined (rather than a fresh
+    // StreamPosition, as reset() does) mirrors the constructor's own
+    // initial state and is what every startObject()/startArray()/onValue()
+    // call already treats as "no document in flight yet" - the same
+    // ROOT-equivalent check they already handle for the very first
+    // document.
+    resyncAfterError(): void {
+        this.position = undefined;
+        this.openContainers = 0;
+        this.dispatcher = null;
+        this.dispatchers = [];
+        this.errored = false;
+    }
+
     startObject(): void {
         if (this.errored) { return; }
         if (this.position === undefined || this.position.peek().getType() === PathOperator.Type.ROOT) {
