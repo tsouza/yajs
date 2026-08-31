@@ -90,21 +90,24 @@ const iFixtures = allFixtures.filter((f) => f.startsWith('i_'));
 // cause, with each group's rationale documented in the comment above it.
 // --------------------------------------------------------------------
 
-// The number tokenizer reconstructs the mantissa by repeated
+// Formerly tracked here as a known gap (GitHub issue #49): the number
+// tokenizer used to reconstruct the mantissa by repeated
 // multiply-by-10-and-add on a plain JS `number` (NUMBER3/4/5/6/7/8 in
 // JsonSaxParser), which accumulates rounding error differently than V8's
-// correctly-rounded string-to-double conversion. Divergence shows up for
-// numbers with many significant digits, and separately `-0` is lost
-// entirely: `magnatude` starts at plain `0`, and `0 * -1 === -0` is true in
-// IEEE 754, so the sign *should* survive `this.magnatude = -this.magnatude`
-// - but NUMBER2 (the "seen a lone leading 0, nothing after it" state)
-// dispatches via `this.callbacks.onNumber(0)` with a hardcoded literal,
-// never consulting `this.negative` at all.
-const NUMBER_PRECISION = new Set([
-    'y_number_double_close_to_zero.json', // -1e-78 rounds to -1.0000000000000005e-78
-    'y_number_minus_zero.json', // -0 -> +0
-    'y_number_negative_zero.json', // -0 -> +0
-]);
+// correctly-rounded string-to-double conversion. Divergence showed up for
+// numbers with many significant digits, and separately `-0` was lost
+// entirely: `magnatude` started at plain `0`, and `0 * -1 === -0` is true in
+// IEEE 754, so the sign *should* have survived `this.magnatude =
+// -this.magnatude` - but NUMBER2 (the "seen a lone leading 0, nothing after
+// it" state) dispatched via `this.callbacks.onNumber(0)` with a hardcoded
+// literal, never consulting `this.negative` at all. Fixed by accumulating
+// the raw number literal as text (`numStr`) while tokenizing and handing
+// the complete literal to `Number()` once the token is known, instead of
+// re-implementing decimal-to-double conversion by hand - see the comment on
+// flushPendingNumber() in JsonSaxParser.ts. y_number_double_close_to_zero.json,
+// y_number_minus_zero.json, and y_number_negative_zero.json (the fixtures
+// that used to be flagged here) now all pass through the generic loop below
+// like any other fixture.
 
 // A bare `""` at the very end of the stream (nothing after the second
 // quote) is misreported as truncated input. Root cause: the triple-double-
@@ -185,7 +188,6 @@ const NO_EXTRA_OR_TRAILING_COMMA_ENFORCEMENT = new Set([
 // no longer needs an entry in KNOWN_N_GAPS.
 
 const KNOWN_Y_GAPS = new Map<string, Set<string>>([
-    ['number precision / sign-of-zero lost', NUMBER_PRECISION],
     ['bare "" at end of stream misreported as truncated', EMPTY_STRING_AT_EOF],
 ]);
 

@@ -106,11 +106,12 @@ export class JsonSaxParser {
   private mState: number;
   private str: string;
   private unicode: string;
-  private negative: boolean;
-  private magnatude: number;
-  private position: number;
-  private exponent: number;
-  private negativeExponent: boolean;
+  // Raw text of the number literal currently being tokenized (NUMBER1-8),
+  // accumulated one ASCII character at a time exactly like `str` above for
+  // strings - see the comment on flushPendingNumber() for why the complete
+  // literal, rather than a running numeric magnitude, is what gets handed
+  // to the JS runtime to convert to a double.
+  private numStr: string;
   // Whether the string currently being parsed opened as a triple-double-quote
   // (`"""`) string. Must persist as instance state (not a local in parse())
   // because a chunk boundary can land anywhere inside a TDQSTR body - a
@@ -349,20 +350,20 @@ export class JsonSaxParser {
         case 0x2d: // `-`
           if (!this.requireValuePosition(buffer, i)) { continue; }
           this.enterValue();
-          this.negative = true;
+          this.numStr = '-';
           this.state = NUMBER1;
           continue;
         case 0x30: // `0`
           if (!this.requireValuePosition(buffer, i)) { continue; }
           this.enterValue();
-          this.magnatude = 0;
+          this.numStr = '0';
           this.state = NUMBER2;
           continue;
         }
         if (n > 0x30 && n <= 0x39) { // 1-9
           if (!this.requireValuePosition(buffer, i)) { continue; }
           this.enterValue();
-          this.magnatude = n - 0x30;
+          this.numStr = String.fromCharCode(n);
           this.state = NUMBER3;
           continue;
         }
@@ -487,12 +488,12 @@ export class JsonSaxParser {
       case NUMBER1: // after minus
         n = buffer[i];
         if (n === 0x30) { // `0`
-          this.magnatude = 0;
+          this.numStr += '0';
           this.state = NUMBER2;
           continue;
         }
         if (n > 0x30 && n <= 0x39) { // `1`-`9`
-          this.magnatude = n - 0x30;
+          this.numStr += String.fromCharCode(n);
           this.state = NUMBER3;
           continue;
         }
@@ -502,9 +503,9 @@ export class JsonSaxParser {
         n = buffer[i];
         switch (n) {
         case 0x2e: // .
-          this.position = 0.1; this.state = NUMBER4; continue;
+          this.numStr += '.'; this.state = NUMBER4; continue;
         case 0x65: case 0x45: // e/E
-          this.exponent = 0; this.state = NUMBER6; continue;
+          this.numStr += String.fromCharCode(n); this.state = NUMBER6; continue;
         }
         if (n >= 0x30 && n <= 0x39) { // 0-9: a digit right after a lone
           // leading zero (e.g. "01") is disallowed - RFC 8259's grammar is
@@ -521,12 +522,12 @@ export class JsonSaxParser {
         n = buffer[i];
         switch (n) {
         case 0x2e: // .
-          this.position = 0.1; this.state = NUMBER4; continue;
+          this.numStr += '.'; this.state = NUMBER4; continue;
         case 0x65: case 0x45: // e/E
-          this.exponent = 0; this.state = NUMBER6; continue;
+          this.numStr += String.fromCharCode(n); this.state = NUMBER6; continue;
         }
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.magnatude = this.magnatude * 10 + (n - 0x30);
+          this.numStr += String.fromCharCode(n);
           continue;
         }
         this.flushPendingNumber();
@@ -535,8 +536,7 @@ export class JsonSaxParser {
       case NUMBER4: // After period
         n = buffer[i];
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.magnatude += this.position * (n - 0x30);
-          this.position /= 10;
+          this.numStr += String.fromCharCode(n);
           this.state = NUMBER5;
           continue;
         }
@@ -545,12 +545,11 @@ export class JsonSaxParser {
       case NUMBER5: // * After digit (after period)
         n = buffer[i];
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.magnatude += this.position * (n - 0x30);
-          this.position /= 10;
+          this.numStr += String.fromCharCode(n);
           continue;
         }
         if (n === 0x65 || n === 0x45) { // E/e
-          this.exponent = 0;
+          this.numStr += String.fromCharCode(n);
           this.state = NUMBER6;
           continue;
         }
@@ -560,12 +559,12 @@ export class JsonSaxParser {
       case NUMBER6: // After E
         n = buffer[i];
         if (n === 0x2b || n === 0x2d) { // +/-
-          if (n === 0x2d) { this.negativeExponent = true; }
+          this.numStr += String.fromCharCode(n);
           this.state = NUMBER7;
           continue;
         }
         if (n >= 0x30 && n <= 0x39) {
-          this.exponent = this.exponent * 10 + (n - 0x30);
+          this.numStr += String.fromCharCode(n);
           this.state = NUMBER8;
           continue;
         }
@@ -574,7 +573,7 @@ export class JsonSaxParser {
       case NUMBER7: // After +/-
         n = buffer[i];
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.exponent = this.exponent * 10 + (n - 0x30);
+          this.numStr += String.fromCharCode(n);
           this.state = NUMBER8;
           continue;
         }
@@ -583,7 +582,7 @@ export class JsonSaxParser {
       case NUMBER8: // * After digit (after +/-)
         n = buffer[i];
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.exponent = this.exponent * 10 + (n - 0x30);
+          this.numStr += String.fromCharCode(n);
           continue;
         }
         this.flushPendingNumber();
@@ -680,47 +679,36 @@ export class JsonSaxParser {
   // with the array/object the number lives in still legitimately open on
   // structStack). Does nothing if the tokenizer isn't currently parked in
   // one of those four states.
+  //
+  // The value is produced by handing the complete raw literal (accumulated
+  // character-by-character into `numStr` as the NUMBER1-8 states above
+  // advance - see the field comment) to `Number()`, rather than by
+  // re-implementing decimal-to-double conversion by manually accumulating a
+  // mantissa (`magnitude = magnitude*10 + digit`) and separately applying
+  // the exponent (`magnitude *= Math.pow(10, exponent)`), as this code used
+  // to. That manual approach is NOT equivalent to a correctly-rounded
+  // string-to-double conversion: each multiply-add step (and the separate
+  // Math.pow/multiply for the exponent) rounds to the nearest double on its
+  // own, so rounding error compounds across steps in a way a single
+  // correctly-rounded conversion never accumulates. For numbers with many
+  // significant digits this silently produced a materially wrong value with
+  // no error raised - e.g. `1.7976931348623157e308` (Number.MAX_VALUE,
+  // exactly representable) overflowed to `Infinity`, and `5e-324`
+  // (Number.MIN_VALUE, exactly representable) underflowed to `0` (see
+  // GitHub issue #49). `Number()` (like `JSON.parse()`) uses the engine's
+  // correctly-rounded string-to-double algorithm, giving exactly one
+  // well-defined, correct answer - including the same well-defined overflow
+  // to +/-Infinity for a literal that's genuinely too big to represent
+  // (e.g. `1.5e+9999`) and underflow to +/-0 for one too small.
   private flushPendingNumber(): void {
     switch (this.state) {
     case NUMBER2: // * After initial zero
-      this.callbacks.onNumber(0);
-      this.state = START;
-      this.magnatude = undefined;
-      this.negative = undefined;
-      break;
     case NUMBER3: // * After digit (before period)
-      this.state = START;
-      if (this.negative) {
-        this.magnatude = -this.magnatude;
-        this.negative = undefined;
-      }
-      this.callbacks.onNumber(this.magnatude);
-      this.magnatude = undefined;
-      break;
     case NUMBER5: // * After digit (after period)
-      this.state = START;
-      if (this.negative) {
-        this.magnatude = -this.magnatude;
-        this.negative = undefined;
-      }
-      this.callbacks.onNumber(this.negative ? -this.magnatude : this.magnatude);
-      this.magnatude = undefined;
-      this.position = undefined;
-      break;
     case NUMBER8: // * After digit (after +/-)
-      if (this.negativeExponent) {
-        this.exponent = -this.exponent;
-        this.negativeExponent = undefined;
-      }
-      this.magnatude *= Math.pow(10, this.exponent);
-      this.exponent = undefined;
-      if (this.negative) {
-        this.magnatude = -this.magnatude;
-        this.negative = undefined;
-      }
       this.state = START;
-      this.callbacks.onNumber(this.magnatude);
-      this.magnatude = undefined;
+      this.callbacks.onNumber(Number(this.numStr));
+      this.numStr = undefined;
       break;
     }
   }

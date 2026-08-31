@@ -11,7 +11,7 @@ import yajs from '../main/yajs';
 // chunk, so chunk-boundary bugs in JsonSaxParser were invisible.
 //
 // JsonSaxParser is a hand-written byte-by-byte state machine with private
-// fields (this.str, this.magnatude, this.unicode, the TDQSTR run-length
+// fields (this.str, this.numStr, this.unicode, the TDQSTR run-length
 // counters, etc.) that must persist correctly no matter where a chunk ends
 // and the next begins - a truncated unicode escape, a number split
 // mid-digit, a string split mid-escape-sequence, or the triple-double-quote
@@ -24,7 +24,7 @@ import yajs from '../main/yajs';
 // resulting {path, value} event sequence is byte-for-byte identical to the
 // baseline every time.
 describe('chunk boundary handling', () => {
-    const FIXTURES = ['simple', 'array', 'ndjson', 'triple-dquotes', 'utf8'];
+    const FIXTURES = ['simple', 'array', 'ndjson', 'triple-dquotes', 'utf8', 'numbers'];
 
     FIXTURES.forEach((fixture) => {
         it(`should produce identical events for "${fixture}" no matter how ` +
@@ -73,6 +73,37 @@ describe('chunk boundary handling', () => {
         expect(result).to.have.lengthOf(1);
         expect(result[0].value).to.equal('𝄞');
     });
+
+    // Dedicated, narrowly-scoped regression for GitHub issue #49: a number
+    // literal split mid-token across write() calls must still produce
+    // exactly the value JSON.parse would produce from the same literal in
+    // one piece, at every possible split point - not just "the same value
+    // as some (potentially still-wrong) unchunked baseline", which is all
+    // the generic 'numbers' fixture above (via the shared `run()` +
+    // baseline-comparison harness) actually proves. Covers exact
+    // representable edge-of-range values (Number.MAX_VALUE/MIN_VALUE, where
+    // the pre-fix digit-by-digit mantissa accumulation silently overflowed
+    // to Infinity / underflowed to 0) split at every byte offset, including
+    // mid-mantissa, mid-decimal-point, and mid-exponent.
+    it('reconstructs the exact value at every possible split point across a number literal (issue #49)', async () => {
+        const cases: Array<[string, number]> = [
+            ['1.7976931348623157e308', Number.MAX_VALUE],
+            ['5e-324', Number.MIN_VALUE],
+            ['-1234567890123456789', -1234567890123456789],
+            ['-0', -0],
+        ];
+        for (const [literal, expected] of cases) {
+            const doc = Buffer.from(`[${literal}]`);
+            for (let i = 1; i < doc.length; i++) {
+                const result = await run('$', [doc.subarray(0, i), doc.subarray(i)]);
+                expect(result, `${literal} split at byte offset ${i}/${doc.length}`).
+                    to.have.lengthOf(1);
+                expect(Object.is(result[0].value, expected),
+                    `${literal} split at byte offset ${i}/${doc.length}: got ${result[0].value}`).
+                    to.be.true;
+            }
+        }
+    }, 30000);
 });
 
 // Feeds `chunks` to a fresh yajs() stream as separate write() calls - so the
