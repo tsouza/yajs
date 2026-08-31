@@ -14,7 +14,26 @@ export default function yajs(path: string, options = {
     const state = { errored: false };
 
     const stream = through(
-        (chunk: Buffer) => parser.parse(chunk),
+        // `through`'s own write() (node_modules/through/index.js) does no
+        // string-to-Buffer coercion - it hands whatever was passed to
+        // .write()/.pipe() straight through to this callback. JsonSaxParser
+        // deliberately does raw numeric byte indexing (buffer[i] compared
+        // against byte constants - see JsonSaxParser.ts), which only makes
+        // sense for a Buffer: indexing into a plain string yields
+        // single-character strings, every numeric comparison silently fails,
+        // and parsing falls through into a confusing, content-independent
+        // NUL-byte error (issue #61). A plain JS string is nonetheless a very
+        // natural thing to .write() to a "JSON streaming" library, and
+        // nothing in the README/types warns otherwise - so convert it here
+        // instead, at the one point both .write(str) and .pipe() from a
+        // string-mode Readable funnel through (pipe() just calls
+        // dest.write(chunk) per 'data' event - same code path). This keeps
+        // JsonSaxParser itself Buffer-only and simple. Buffer.from()'s
+        // default encoding is UTF-8, which matches this library's stated
+        // JSON/UTF-8 handling elsewhere (see JsonSaxParser's appendUtf8Byte)
+        // and correctly round-trips non-ASCII content. Buffer chunks pass
+        // through unchanged - existing Buffer-based usage is unaffected.
+        (chunk: Buffer | string) => parser.parse(typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
         () => {
             parser.finish();
             // A bare string value (e.g. a lone root string, or the last item before
