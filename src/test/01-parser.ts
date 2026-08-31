@@ -59,6 +59,65 @@ describe('path parser', () => {
             expect(keys).to.deep.equal(['field1', 'field2']);
         }
     });
+
+    // Regression tests for issue #26: buildArgsExpression()/extractKeys()
+    // naively concatenated tokens while walking the parse tree, which broke
+    // (or silently dropped keys) for several grammar-legal patterns beyond
+    // the simple "chain of &&/||-prefixed terms" case already covered
+    // above.
+    describe('parenthesized groups, bare adjacency, and leading operators ' +
+        '(issue #26)', () => {
+
+        it('should recurse into a parenthesized group instead of dropping ' +
+            'its keys and emitting empty, invalid `()`', () => {
+            const parser = createParser('$.[(a && b) || (!c && d)]x');
+            const path = parser.path();
+            const filter = path.pathStep()[0].actionFilter();
+            if (filter) {
+                const keys = extractKeys(filter.filterExpression());
+                expect(keys).to.deep.equal(['a', 'b', 'c', 'd']);
+                const argsExpr = buildArgsExpression(filter.filterExpression());
+                expect(argsExpr).to.equal(
+                    '(args["a"]&&args["b"])||(!args["c"]&&args["d"])');
+            }
+        });
+
+        it('should default to `&&` between adjacent terms with no ' +
+            'explicit operator (the README\'s "keys filter" style: ' +
+            '`[a b]`, `{prop1 prop2}`)', () => {
+            const parser = createParser('$.test{field1 field2}');
+            const path = parser.path();
+            const projection = path.pathLeaf().actionProject();
+            if (projection) {
+                const keys = extractKeys(projection.filterExpression());
+                expect(keys).to.deep.equal(['field1', 'field2']);
+                const argsExpr = buildArgsExpression(projection.filterExpression());
+                expect(argsExpr).to.equal('args["field1"]&&args["field2"]');
+            }
+        });
+
+        it('should default to `&&` between an unprefixed term and a ' +
+            'following bare NOT term (`[a !b]`)', () => {
+            const parser = createParser('$.[a !b]x');
+            const path = parser.path();
+            const filter = path.pathStep()[0].actionFilter();
+            if (filter) {
+                const argsExpr = buildArgsExpression(filter.filterExpression());
+                expect(argsExpr).to.equal('args["a"]&&!args["b"]');
+            }
+        });
+
+        it('should drop a leading `&&`/`||` that has no left operand ' +
+            '(`[&&x]`)', () => {
+            const parser = createParser('$.[&&x]y');
+            const path = parser.path();
+            const filter = path.pathStep()[0].actionFilter();
+            if (filter) {
+                const argsExpr = buildArgsExpression(filter.filterExpression());
+                expect(argsExpr).to.equal('args["x"]');
+            }
+        });
+    });
 });
 
 function createParser(path: string): YAJSParser {

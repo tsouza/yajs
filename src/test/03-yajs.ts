@@ -404,6 +404,93 @@ describe('yajs', () => {
                 expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
             }));
     });
+
+    // Regression tests for issue #26: buildArgsExpression()/extractKeys()
+    // generated invalid JS (or dropped keys) for parenthesized groups,
+    // adjacent un-glued terms, and leading operators - grammar-legal
+    // patterns reachable via normal selector syntax. Previously this either
+    // crashed synchronously out of yajs()/YAJSPath.parse() or, for a
+    // filter/project step reached only while a document was streaming,
+    // crashed the process (direct .write()) or failed completely silently
+    // (piped input).
+    describe('filter/project expression codegen (issue #26)', () => {
+
+        it('should not throw and should correctly apply a parenthesized ' +
+            'boolean group in a project expression (issue\'s own repro, ' +
+            '`(a && b) || (!c && d)`)', () =>
+            testJson(
+                '[{"a":1,"b":1,"tag":"ab"},' +
+                '{"d":1,"tag":"d-only-no-c"},' +
+                '{"c":1,"d":1,"tag":"cd"},' +
+                '{"a":1,"tag":"a-only"},' +
+                '{"b":1,"c":1,"tag":"b-and-c"}]',
+                '$.*{(a && b) || (!c && d)}').
+                then((array) => {
+                    // Neither 'cd' (c&&d present, but !c makes that clause
+                    // false, and a/b are absent) nor 'a-only' (a present but
+                    // not b, so a&&b is false; c/d both absent, so !c&&d is
+                    // also false) nor 'b-and-c' (same shape as 'a-only') pass
+                    // either clause of the OR.
+                    expect(array.map((e) => e.value.tag)).to.deep.equal(
+                        ['ab', 'd-only-no-c']);
+                }));
+
+        it('should not throw and should correctly apply a parenthesized ' +
+            'boolean group used as a path filter, which checks ancestor ' +
+            'keys on the way down to the matched field (previously ' +
+            'YAJSPath.parse() itself threw `SyntaxError: Unexpected ' +
+            'token \')\'`)', () =>
+            Promise.all([
+                // "a" and "b" are both ancestors of "x" (nested a -> b -> x),
+                // satisfying the `(a && b)` clause.
+                testJson('{"a":{"b":{"x":"matches-via-a-and-b"}}}',
+                    '$..[(a && b) || (!c && d)]x'),
+                // "c" is an ancestor of "x" and "d" isn't, so `!c && d` is
+                // false; "a"/"b" are absent, so `a && b` is false too.
+                testJson('{"c":{"x":"does-not-match"}}',
+                    '$..[(a && b) || (!c && d)]x'),
+            ]).then(([matches, noMatch]) => {
+                expect(matches.map((e) => e.value)).to.deep.equal(['matches-via-a-and-b']);
+                expect(noMatch).to.have.lengthOf(0);
+            }));
+
+        it('should default adjacent, unglued project keys to `&&` ' +
+            '(the README\'s "keys filter" style: `{prop1 prop2}`)', () =>
+            testJson(
+                '[{"prop1":"v1","prop2":"v2","tag":"both"},' +
+                '{"prop1":"v1","tag":"only-prop1"}]',
+                '$.*{prop1 prop2}').
+                then((array) => {
+                    expect(array.map((e) => e.value.tag)).to.deep.equal(['both']);
+                }));
+
+        it('should not crash the process/stream on adjacent, unglued ' +
+            'filter keys reached mid-stream (issue\'s own repro, ' +
+            '`{prop1 prop2}` via `.write()`)', () =>
+            testJson('{"foo":{"prop1":"v1","prop2":"v2"}}', '$.foo{prop1 prop2}').
+                then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                    expect(array[0].value).to.deep.equal({ prop1: 'v1', prop2: 'v2' });
+                }));
+
+        it('should drop a leading bare `&&` that has no left operand ' +
+            '(issue\'s own repro shape, `$.[&&x]y` - previously this ' +
+            'threw synchronously out of yajs() itself: `SyntaxError: ' +
+            'Unexpected token \'&&\'`), and still filter correctly once ' +
+            'the operator is dropped', () =>
+            // "a" is an ancestor of "x" (nested a -> x); with the leading
+            // `&&` dropped this collapses to the plain `[a]` filter, so it
+            // should behave identically to that selector.
+            Promise.all([
+                testJson('{"a":{"x":"has-ancestor-a"}}', '$..[&&a]x'),
+                testJson('{"a":{"x":"has-ancestor-a"}}', '$..[a]x'),
+                testJson('{"b":{"x":"no-ancestor-a"}}', '$..[&&a]x'),
+            ]).then(([leadingOp, plain, noMatch]) => {
+                expect(leadingOp.map((e) => e.value)).to.deep.equal(['has-ancestor-a']);
+                expect(leadingOp).to.deep.equal(plain);
+                expect(noMatch).to.have.lengthOf(0);
+            }));
+    });
 });
 
 function test(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {
