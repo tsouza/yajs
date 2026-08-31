@@ -274,6 +274,76 @@ describe('yajs', () => {
                 }));
     });
 
+    // Regression tests for GitHub issue #26: buildArgsExpression()/
+    // extractKeys() only recursed into children that were themselves a
+    // FilterExpressionTermContext, which misses several grammar-legal shapes
+    // entirely - a parenthesized group (`LP filterExpression RP`, stored as
+    // `ctx._expr`, a FilterExpressionContext rather than a
+    // FilterExpressionTermContext), an adjacent bare-key list with no
+    // explicit `&&`/`||` between terms (the README's documented "keys
+    // filter" style, e.g. `{prop1 prop2}`), and a leading bare `&&`/`||`
+    // with no left-hand operand. All three used to either crash the process,
+    // silently drop keys / match nothing, or throw a raw, confusing
+    // vm.runInContext SyntaxError from deep inside the library instead of a
+    // clean, catchable error. See utils.ts for the fix.
+    describe('filter/project expression compiler (issue #26)', () => {
+
+        it('matches a parenthesized-group filter, simple and nested, combined with && and ||', () =>
+            testJson(JSON.stringify({
+                ab: { a: { b: { x: 'm1' } } },
+                dOnly: { d: { x: 'm2' } },
+                cd: { c: { d: { x: 'm3' } } },
+                eOnly: { e: { x: 'm4' } },
+            }), '$..[(a && b) || (!c && d)]x').
+                then((array) => {
+                    expect(array).to.have.lengthOf(2);
+                    expect(array.map((e) => e.value)).to.deep.equal(['m1', 'm2']);
+                }));
+
+        it('matches an adjacent two-key bare list in a [...] filter as an OR (issue\'s own repro path, via the CLI-equivalent .pipe() flow)', () =>
+            testJson(JSON.stringify({
+                a: { x: 'v1' }, c: { x: 'v2' }, b: { x: 'v3' },
+            }), '$..[a b]x').
+                then((array) => {
+                    expect(array).to.have.lengthOf(2);
+                    expect(array.map((e) => e.value)).to.deep.equal(['v1', 'v3']);
+                }));
+
+        it('matches an adjacent three-or-more-key bare list in a [...] filter as an OR', () =>
+            testJson(JSON.stringify({
+                a: { x: 'v1' }, m: { x: 'v2' }, b: { x: 'v3' }, c: { x: 'v4' },
+            }), '$..[a b c]x').
+                then((array) => {
+                    expect(array).to.have.lengthOf(3);
+                    expect(array.map((e) => e.value)).to.deep.equal(['v1', 'v3', 'v4']);
+                }));
+
+        it('gates emission of the whole object on an adjacent bare-key list via {...} without crashing (issue\'s own direct .write() repro)', () =>
+            // Note: `{...}` is a boolean gate on whether to emit the whole
+            // matched object (per the README: "Will emit only if keys
+            // filter evaluates to true"), not a key-projection/pick - so
+            // prop3 (not one of the listed keys) is still expected in the
+            // emitted value once the gate passes.
+            Promise.all([
+                testJson(JSON.stringify({ foo: { prop1: 'v1', prop2: 'v2', prop3: 'v3' } }),
+                    '$.foo{prop1 prop2}'),
+                testJson(JSON.stringify({ foo: { prop3: 'v3' } }),
+                    '$.foo{prop1 prop2}'),
+            ]).then(([withEitherKey, withNeitherKey]) => {
+                expect(withEitherKey).to.have.lengthOf(1);
+                expect(withEitherKey[0].value).to.deep.equal({ prop1: 'v1', prop2: 'v2', prop3: 'v3' });
+                expect(withNeitherKey).to.have.lengthOf(0);
+            }));
+
+        it('rejects a selector with a leading bare && with no left-hand operand via a clean, synchronous, catchable Error (issue\'s own repro), instead of a raw VM SyntaxError', () => {
+            expect(() => yajs('$.[&&x]y')).to.throw(/has no left-hand operand/);
+        });
+
+        it('rejects a selector with a leading bare || with no left-hand operand the same way', () => {
+            expect(() => yajs('$.[||x]y')).to.throw(/has no left-hand operand/);
+        });
+    });
+
     // Regression tests for GitHub issues #14 and #15: a matched array's
     // immediate elements must each be streamed as one whole value, the same
     // way an object element already was (see 'should access in nested array
