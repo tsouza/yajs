@@ -1,15 +1,26 @@
 # Benchmark
 
-This is a benchmark comparing yajs with other two json streaming js libraries: [oboe.js](https://github.com/jimhigson/oboe.js) and [JSONStream](https://github.com/dominictarr/JSONStream).
+This is a benchmark comparing yajs with other json streaming js libraries:
+[oboe.js](https://github.com/jimhigson/oboe.js) and
+[JSONStream](https://github.com/dominictarr/JSONStream), with
+[stream-json](https://www.npmjs.com/package/stream-json) available as a
+fourth comparison in the current harness (see the update note below).
+
+The numbers in the [Results](#results) section are the **historical April
+2018 run** of yajs 1.3.0, executed under the software/hardware configuration
+listed below. They have not been re-run since.
 
 *Update (2026)*: the bench suite's toolchain (which had bit-rotted after
 `ts-node` was removed) was restored to working order, running the
 hand-written `bench-*.ts` scripts directly via [tsx](https://github.com/privatenumber/tsx)
-(see `package.json`). While restoring it, [stream-json](https://www.npmjs.com/package/stream-json)
-was added as a fourth comparison alongside the original oboe.js/JSONStream
-pair: oboe.js has seen no meaningful release since ~2016 and JSONStream is
-maintained but old-style, while stream-json is the actively-maintained,
-widely-used modern standard for this class of tool today.
+(see `package.json`). While restoring it, stream-json
+was added as a fourth *available* comparison alongside the original
+oboe.js/JSONStream pair: oboe.js has seen no meaningful release since ~2016
+and JSONStream is maintained but old-style, while stream-json is the
+actively-maintained, widely-used modern standard for this class of tool
+today. The modernized harness has not (yet) produced a fresh results table -
+the tables below therefore still show only the original three libraries. To
+get current numbers for all four on your own machine, run `npm run bench`.
 
 ## Method
 
@@ -46,6 +57,8 @@ three libraries' recursive (`..`) selectors. See `bench-stream-json.ts`.*
 
 ## Software Configuration
 
+*(As of the historical April 2018 run reported in Results below.)*
+
 Software    | Version
 ------------|-----------------------------------------
 OS          | Ubuntu 17.10 (kernel 4.13.0-38-generic)
@@ -66,17 +79,24 @@ Disk     | Samsung | 250GB SSD 850 EVO mSATA (S248NXAH204096F)
 
 ## Results
 
+Historical run, April 2018 (see configuration above).
+
+**EPS vs yajs** = the library's Avg EPS as a percentage of yajs's Avg EPS on
+the same dataset (`library EPS ÷ yajs EPS × 100`, computed from the Avg EPS
+column). Lower means slower relative to yajs; yajs itself is the 100%
+baseline (shown as `-`).
+
 ### Dataset 1
 
-Library    | Completed |   Time   | Avg EPS | % Diff
+Library    | Completed |   Time   | Avg EPS | EPS vs yajs
 -----------|:---------:|:--------:|--------:|:-------:
 yajs       | Yes       | 16.627 s | 126.50K | -
-JSONStream | Yes       | 26.377 s | 78.21K  | 61.74%
+JSONStream | Yes       | 26.377 s | 78.21K  | 61.83%
 oboe.js    | Yes       | 46.965 s | 43.34K  | 34.26%
 
 ### Dataset 2
 
-  Library  | Completed |      Time      | Avg EPS | % Diff
+  Library  | Completed |      Time      | Avg EPS | EPS vs yajs
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 13 m, 52.066 s | 12.03K  | -
 JSONStream | Yes       | 37 m, 55.946 s | 4.39K   | 36.49%
@@ -84,15 +104,15 @@ oboe.js    | Yes       | 51 m, 56.755 s | 3.21K   | 26.68%
 
 ### Dataset 3
 
-  Library  | Completed |        Time    | Avg EPS | % Diff
+  Library  | Completed |        Time    | Avg EPS | EPS vs yajs
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 20 m, 48.908 s | 12.02K  | -
-JSONStream | Yes       | 57 m, 33.585 s | 4.20K   | 34.91%
+JSONStream | Yes       | 57 m, 33.585 s | 4.20K   | 34.94%
 oboe.js    | No        | -              | -       | -
 
 ### Dataset 4
 
-  Library  | Completed |      Time      | Avg EPS | % Diff
+  Library  | Completed |      Time      | Avg EPS | EPS vs yajs
 -----------|:---------:|:--------------:|:-------:|:-------:
 yajs       | Yes       | 8 m, 31.11 s   | 548.68K | -
 JSONStream | Yes       | 51 m, 23.581 s | 90.82K  | 16.55%

@@ -99,9 +99,18 @@ package-lock.json
 .ts-node
 .history
 
-# build
-dist
+# sources (only the compiled dist/ tree ships)
 src
+
+# repo/dev files that have no business in the published tarball
+.gitattributes
+.gitmodules
+.github
+wiki
+benchmark.md
+eslint.config.js
+tsconfig.json
+vitest.config.ts
 
 ##
 

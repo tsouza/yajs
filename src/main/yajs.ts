@@ -1,13 +1,43 @@
-import { Transform } from 'stream';
 import through from 'through';
 import { ThroughStream } from 'through';
 import { StreamContext } from './lib/context/StreamContext';
 import { YAJSPath } from './lib/path/YAJSPath';
 import { JsonSaxParser } from './lib/utils/JsonSaxParser';
 
-export default function yajs(path: string, options = {
+/**
+ * The shape of each `'data'` event emitted by a yajs stream: the location of
+ * the match plus its fully-materialized value.
+ */
+export interface YAJSChunk {
+    /**
+     * The sequence of object keys (and, when `pathIncludeArrayIndex` is
+     * enabled, array indices) leading from the document root to the match.
+     */
+    path: Array<string | number>;
+    /** The matched value. */
+    value: any;
+}
+
+/** Options accepted by {@link yajs}. */
+export interface YAJSOptions {
+    /**
+     * When true, array indices are included as numbers in each emitted
+     * chunk's `path`. Defaults to false (indices are omitted).
+     */
+    pathIncludeArrayIndex?: boolean;
+}
+
+// The declared return type is NodeJS.ReadWriteStream rather than
+// stream.Transform: the object actually returned is a classic `through`
+// stream (`instanceof stream.Transform` is false), so claiming Transform
+// would invite consumers to rely on Transform-specific API that isn't
+// there. NodeJS.ReadWriteStream is the conventional interface for
+// through-style streams and covers everything yajs supports and documents:
+// write()/end(), pipe(), pause()/resume(), and the EventEmitter surface
+// ('data'/'error'/'end' - see YAJSChunk for the 'data' payload).
+export default function yajs(path: string, options: YAJSOptions = {
     pathIncludeArrayIndex: false,
-}): Transform {
+}): NodeJS.ReadWriteStream {
     // Shared between JsonSaxParser's onError and StreamContext's onError -
     // see the comment on flushPendingString() below for why every source of
     // 'error' on this stream needs to mark the same flag.

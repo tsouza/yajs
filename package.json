@@ -1,7 +1,7 @@
 {
   "name": "yajson-stream",
   "version": "2.0.0-beta.1",
-  "description": "Yet Another JSON Streaming Tool",
+  "description": "Yet Another JSON Streaming Tool - streaming JSON filter (library + CLI) with a jsonpath-like selector syntax",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -28,7 +28,9 @@
   },
   "main": "dist/main/main.js",
   "types": "dist/main/yajs.d.ts",
-  "module": "dist/main/yajs.js",
+  "engines": {
+    "node": ">=22"
+  },
   "bin": {
     "yajs": "dist/main/index.js"
   },
