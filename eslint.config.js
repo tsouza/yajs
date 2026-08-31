@@ -11,6 +11,13 @@ module.exports = tseslint.config(
       'dist/**',
       'coverage/**',
       'node_modules/**',
+      // Agent worktrees (.claude/worktrees/<name>/) are full nested repo
+      // checkouts used for isolated background work; without this, `eslint .`
+      // recurses into them and reports their (possibly in-progress, possibly
+      // stale-relative-to-master) generated/ANTLR files as if they were this
+      // repo's own source - a repeated source of spurious "hundreds of lint
+      // errors on master" false alarms this session.
+      '.claude/worktrees/**',
       'eslint.config.js',
       'src/main/main.js',
       'src/main/lib/path/parser/YAJSLexer.ts',
