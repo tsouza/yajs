@@ -41,8 +41,54 @@ export class StreamPosition extends YAJSPath {
     private mAncestorKeys: string[] = [];
     private mKeyDepthStacks: Map<string, number[]> = new Map();
 
-    constructor(trackAncestorKeys: boolean = true) {
+    // Issue #44: incremental cache backing path(), so a match doesn't have
+    // to re-walk and re-filter the *entire* position stack from scratch
+    // every single time - which, since path() is called on every successful
+    // match (not just '..' ones), compounds an O(depth) rebuild into
+    // O(matches * depth) overall, i.e. O(depth^2) for a selector like
+    // '$..a' that matches at every depth of a uniformly deep document (the
+    // same shape of blowup issue #34 fixed for the separate backward-scan
+    // mechanism, but this one hits ALL matches, not just '..' ones).
+    //
+    // mSegments is kept as an already-filtered, contiguous (no gaps for
+    // ARRAY/transparent entries) list of the *contributing* path segments
+    // for whatever the position stack currently looks like - i.e. it is
+    // always exactly what YAJSPath.path()'s O(depth) scan-and-filter loop
+    // would currently produce, maintained incrementally instead of
+    // recomputed - so path() itself becomes a single O(k) copy
+    // (mSegments.slice()) of just the k real segments, with no
+    // re-scanning of the (potentially much larger) full stack, including
+    // ARRAY levels that never contribute anything unless
+    // pathIncludeArrayIndex is set.
+    //
+    // mSegmentBaseline[i] is "how many segments mSegments held from
+    // shallower levels alone, right when position-stack index i was most
+    // recently entered" - i.e. the length to truncate mSegments back to
+    // once index i (or anything it's currently holding) needs to be
+    // retired, undone, or replaced. Recorded on every stepIntoObject()/
+    // stepIntoArray() (mirroring mAncestorKeys' per-index bookkeeping), and
+    // relied on by updateObjectEntry()/increaseArrayIndex() (replacing
+    // whatever index i currently contributes) and stepOutObject()/
+    // stepOutArray() (removing it entirely).
+    //
+    // Unlike trackAncestorKeys, this bookkeeping is NOT gated off for
+    // "ordinary" (non-'..') paths: path() is invoked for every match
+    // regardless of selector shape, so every path needs its segments kept
+    // current, not just descendant ones. What IS gated is the "index
+    // in op" side of the standard `if (op.key) ... else if (includeArrayIndex
+    // && 'index' in op) ...` else-if in YAJSPath.path() - preserved here
+    // as `pathIncludeArrayIndex`, fixed for the lifetime of this position
+    // (StreamContext always constructs it from the same option that would
+    // otherwise be passed into every path() call), which mirrors the
+    // original else-if's short-circuit: an ArrayIndex level only ever
+    // contributes when this is on, exactly as before.
+    private readonly pathIncludeArrayIndex: boolean;
+    private mSegments: Array<string | number> = [];
+    private mSegmentBaseline: number[] = [];
+
+    constructor(pathIncludeArrayIndex: boolean = false, trackAncestorKeys: boolean = true) {
         super();
+        this.pathIncludeArrayIndex = pathIncludeArrayIndex;
         this.trackAncestorKeys = trackAncestorKeys;
     }
 
@@ -67,19 +113,31 @@ export class StreamPosition extends YAJSPath {
         } else {
             this.push(new ChildNode());
         }
+        const idx = this.pathDepth() - 1;
+        // Issue #44: record where mSegments stood, from shallower levels
+        // alone, right as this (possibly reused) slot is (re-)entered -
+        // see mSegmentBaseline's field comment. Safe to record unconditionally
+        // (no gate, unlike trackAncestorKeys below): a fresh/reused ChildNode
+        // is keyless until updateObjectEntry() below, so it hasn't
+        // contributed anything yet, and mSegments.length is already exactly
+        // this baseline at this point (stepOutObject()/updateObjectEntry()
+        // truncate it back down on every prior exit/replace of this same
+        // idx) - this just caches that value for stepOutObject()/
+        // updateObjectEntry() to truncate back to later.
+        this.mSegmentBaseline[idx] = this.mSegments.length;
         if (this.trackAncestorKeys) {
             // A reused slot (the `previous` branch above) may still carry a
             // stale cache entry from whatever key last occupied it - clear
             // it now (before any match attempt can see it) rather than only
             // ever clearing lazily inside updateObjectEntry(), since this
             // new object is genuinely keyless until its first key arrives.
-            this.clearAncestorKeyAt(this.pathDepth() - 1);
+            this.clearAncestorKeyAt(idx);
         }
     }
 
     updateObjectEntry(key: string) {
+        const idx = this.pathDepth() - 1;
         if (this.trackAncestorKeys) {
-            const idx = this.pathDepth() - 1;
             // A single object with multiple keys reuses this exact same
             // ChildNode slot/index once per key (issue #34's cache tracks
             // keys by position-stack index, so each earlier key recorded
@@ -95,9 +153,22 @@ export class StreamPosition extends YAJSPath {
             depths.push(idx);
         }
         (this.peek() as ChildNode).key = key;
+        // Issue #44: a later key on the same still-open object (or a reused
+        // slot's new key) replaces whatever this idx last contributed to
+        // mSegments, exactly the same slot-reuse concern updateObjectEntry()
+        // already handles for mAncestorKeys above - truncate back to the
+        // baseline recorded when idx was entered, then push the new segment.
+        // Guarded by `if (key)`, not `key !== undefined`, to match
+        // YAJSPath.path()'s own pre-existing `if (op.key)` truthiness check
+        // (an empty-string key is - like there - not included).
+        this.mSegments.length = this.mSegmentBaseline[idx];
+        if (key) {
+            this.mSegments.push(key);
+        }
     }
 
     stepOutObject() {
+        this.truncateSegmentsAt(this.pathDepth() - 1);
         this.pop();
     }
 
@@ -115,16 +186,25 @@ export class StreamPosition extends YAJSPath {
         if (!this.stepInto(PathOperator.Type.ARRAY)) {
             this.push(new ArrayIndex());
         }
+        const idx = this.pathDepth() - 1;
+        // Issue #44: same reasoning as stepIntoObject() - this freshly
+        // entered ArrayIndex slot hasn't contributed a segment yet (only
+        // increaseArrayIndex() below does, once pathIncludeArrayIndex is on
+        // and a sibling element actually arrives), so mSegments.length
+        // right now already equals this idx's correct baseline; cache it
+        // for stepOutArray()/increaseArrayIndex() to truncate back to.
+        this.mSegmentBaseline[idx] = this.mSegments.length;
         if (this.trackAncestorKeys) {
             // Same reasoning as stepIntoObject(): a reused (or, in
             // principle, otherwise stale) slot at this index must not keep
             // masquerading as whatever key last occupied it - an ArrayIndex
             // position is never itself keyed.
-            this.clearAncestorKeyAt(this.pathDepth() - 1);
+            this.clearAncestorKeyAt(idx);
         }
     }
 
     stepOutArray() {
+        this.truncateSegmentsAt(this.pathDepth() - 1);
         this.pop();
     }
 
@@ -177,6 +257,18 @@ export class StreamPosition extends YAJSPath {
         const peek = this.peek();
         if (peek && 'index' in peek) {
             (peek as ArrayIndex).index++;
+            if (this.pathIncludeArrayIndex) {
+                // Issue #44: the array currently on top of the stack just
+                // advanced to a new element - its own contributed segment
+                // (if pathIncludeArrayIndex is on) changes to match, exactly
+                // like updateObjectEntry() replaces a ChildNode's segment on
+                // a new key: truncate back to this idx's own baseline (this
+                // IS the idx whose ArrayIndex was pushed, hence its own
+                // recorded baseline applies), then push the new index.
+                const idx = this.pathDepth() - 1;
+                this.mSegments.length = this.mSegmentBaseline[idx];
+                this.mSegments.push((peek as ArrayIndex).index);
+            }
         }
     }
 
@@ -220,6 +312,38 @@ export class StreamPosition extends YAJSPath {
             return depths ? StreamPosition.largestAtMost(depths, fromIndex) : -1;
         }
         return super.nearestAncestorIndex(target, fromIndex);
+    }
+
+    // Issue #44: O(k) override of YAJSPath's O(depth) path() (k = the
+    // number of segments actually in the resulting path, always <= depth,
+    // often much less once ARRAY/transparent stack levels are excluded).
+    // mSegments (see its field comment) is kept exactly in sync with what
+    // the base class's scan-and-filter loop would currently produce, so
+    // there is nothing left to do here but hand back an independent copy -
+    // every match still gets its own array (still genuinely O(k), which is
+    // inherent - see the field comment), but with none of the redundant
+    // O(depth) re-filtering of the full stack on every single call.
+    //
+    // The `includeArrayIndex` parameter is intentionally unused: it is
+    // baked into this.pathIncludeArrayIndex at construction time instead
+    // (see the field comment), because - unlike YAJSPath.path(), which
+    // recomputes from scratch and so can honor a different flag on every
+    // call - mSegments is maintained incrementally and can only ever
+    // reflect one fixed answer to "include array indices or not". This is
+    // safe because StreamContext's only caller always passes the exact
+    // same pathIncludeArrayIndex it constructed this StreamPosition with.
+    path(_includeArrayIndex?: boolean): string[] {
+        return this.mSegments.slice() as string[];
+    }
+
+    // Truncates mSegments back to whatever it held before position-stack
+    // index idx last contributed anything - i.e. undoes idx's own
+    // contribution (if it made one), without touching any shallower
+    // level's. Shared by stepOutObject()/stepOutArray(), both of which call
+    // this with idx still on top of the stack (before the matching pop()
+    // actually removes it) so mSegmentBaseline[idx] is still valid to read.
+    private truncateSegmentsAt(idx: number): void {
+        this.mSegments.length = this.mSegmentBaseline[idx];
     }
 
     // Retires index idx's cache entry (if any) before it's about to be

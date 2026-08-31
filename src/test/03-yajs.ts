@@ -873,6 +873,63 @@ describe('yajs', () => {
         }, 10000);
     });
 
+    // Regression tests for GitHub issue #44: StreamContext.onMatchListener
+    // rebuilt the full match path from scratch (YAJSPath.path()'s O(depth)
+    // scan-and-filter over the entire position stack) on *every* successful
+    // match, not just descendant ones - so a selector matching at every one
+    // of D depths (e.g. issue #34's own '$..a' repro shape) paid O(D) work
+    // per match, O(D^2) overall, on top of whatever issue #34's own fix
+    // (PR #43) already addressed in the backward-scan mechanism itself.
+    // Fixed via an incrementally-maintained segment list in StreamPosition
+    // (mSegments/mSegmentBaseline), kept in sync with every position-stack
+    // mutation, so path() becomes a single O(k) copy of just the k real
+    // segments instead of an O(depth) re-scan of the whole stack.
+    //
+    // This does NOT change the underlying O(D^2) complexity for this exact
+    // pathological shape (every one of D matches still needs its own
+    // O(average depth) array - that copy cost is inherent, not redundant
+    // work), but removes a large, genuinely wasteful constant factor (the
+    // repeated re-filtering of ARRAY/transparent stack levels that never
+    // contribute a segment). Independently measured: depth 20,000 dropped
+    // from ~11.7s (issue #34's own fix alone) to ~0.8-1.1s - roughly a
+    // 10-15x improvement, not a change of complexity class. See issue #44
+    // itself and its own linked follow-up discussion for that nuance.
+    describe('per-match path materialization stays cheap even when every level matches (issue #44)', () => {
+
+        function buildDeepChain(depth: number, key: string): string {
+            return `${Array(depth).fill(`{"${key}":`).join('')}1${'}'.repeat(depth)}`;
+        }
+
+        it('matches a 20,000-deep chain of the same repeated key well under the pre-#44-fix time (own repro shape: $..a, combined match+output cost)', () => {
+            const depth = 20000;
+            const json = buildDeepChain(depth, 'a');
+            const start = Date.now();
+            return testJson(json, '$..a').then((array) => {
+                const elapsedMs = Date.now() - start;
+                expect(array).to.have.lengthOf(depth);
+                // Pre-#44 (i.e. with only issue #34's backward-scan fix)
+                // measured ~11.7s at this depth; post-#44 measures roughly
+                // 0.8-1.1s locally. A generous upper bound for a slow CI
+                // machine - comfortably below what an accidental revert of
+                // #44 (while #34 stays fixed) would produce, and nowhere
+                // near what having neither fix would produce.
+                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(5000);
+            });
+        }, 20000);
+
+        it('still produces a correct, independent path array per match when a key is reused multiple times in the same object, mixed with arrays and pathIncludeArrayIndex (adversarial: exercises the segment-baseline truncate/replace logic directly)', () =>
+            testJson(
+                '{"list":[{"tag":"first","nested":{"tag":"inner"}},{"tag":"second"}]}',
+                '$..tag', true).
+            then((array) => {
+                expect(array).to.deep.equal([
+                    { path: [ 'list', 0, 'tag' ], value: 'first' },
+                    { path: [ 'list', 0, 'nested', 'tag' ], value: 'inner' },
+                    { path: [ 'list', 1, 'tag' ], value: 'second' },
+                ]);
+            }));
+    });
+
     // Regression tests for GitHub issue #37: AbstractFilteredOperator.
     // matchFilter() discarded the key-name-equality `matches` boolean
     // whenever a filter expression was attached, so '[<filter>]<key>'
