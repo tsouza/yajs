@@ -196,6 +196,89 @@ describe('NDJSON resyncs after a malformed record instead of dropping ' +
     }, 2000);
 });
 
+// Regression tests for a gap in the issue #50 NDJSON resync above: when a
+// record's first invalid byte is ITSELF the terminating newline (a string,
+// number, or literal truncated at its own end-of-line - the most common
+// end-of-line corruptions), that newline used to be consumed as the error
+// character on its own loop iteration. The `case ERROR:` branch in parse()
+// only ever sees SUBSEQUENT bytes, so the resync point silently became the
+// FOLLOWING record's terminator - and that entire, individually-valid next
+// record was consumed as garbage with no error and no data. Fixed in
+// charError(): when the offending byte is `\n`, the resync point has
+// already arrived - report the error, then resync immediately, so the very
+// next byte starts a fresh document.
+describe('NDJSON resync when the error byte is itself the newline ' +
+    '(issue #50 follow-up)', () => {
+
+    function runChunks(chunks: string[]): Promise<{ values: any[], errors: Error[] }> {
+        const values: any[] = [];
+        const errors: Error[] = [];
+        return new Promise<void>((resolve) => {
+            const stream = yajs('$');
+            stream.
+                on('data', (d: any) => values.push(d.value)).
+                on('error', (err: Error) => errors.push(err)).
+                on('end', resolve);
+            for (const chunk of chunks) { stream.write(Buffer.from(chunk)); }
+            stream.end();
+        }).then(() => ({ values, errors }));
+    }
+
+    it('should not swallow the next record when a string is truncated at ' +
+        'its own terminating newline', () =>
+        runChunks(['"abc\n{"c":1}\n']).then(({ values, errors }) => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(errors[0].message).to.match(/Unexpected/);
+            expect(values).to.deep.equal([{ c: 1 }]);
+        }), 2000);
+
+    it('should not swallow the next record when a number is truncated at ' +
+        'its own terminating newline', () =>
+        runChunks(['1.\n{"n":2}\n']).then(({ values, errors }) => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(values).to.deep.equal([{ n: 2 }]);
+        }), 2000);
+
+    it('should not swallow the next record when a literal is truncated at ' +
+        'its own terminating newline', () =>
+        runChunks(['tr\n{"n":2}\n']).then(({ values, errors }) => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(values).to.deep.equal([{ n: 2 }]);
+        }), 2000);
+
+    // One byte earlier and this is the ordinary issue #50 path (the error
+    // byte is NOT the newline; the newline right after it is seen in the
+    // ERROR state) - which already recovered correctly and must keep doing
+    // so identically.
+    it('should keep recovering identically when the error lands one byte ' +
+        'BEFORE the newline (original issue #50 path)', () =>
+        runChunks(['"abc\x01\n{"c":1}\n']).then(({ values, errors }) => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(values).to.deep.equal([{ c: 1 }]);
+        }), 2000);
+
+    it('should resync identically when the error newline arrives at the ' +
+        'start of its own separate chunk', () =>
+        runChunks(['"abc', '\n{"c":1}\n']).then(({ values, errors }) => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(values).to.deep.equal([{ c: 1 }]);
+        }), 2000);
+
+    // Single-document control: the error newline is the stream's very last
+    // byte, so the immediate resync recovers into a document that never
+    // arrives. Exactly one error - in particular, finish() must not pile a
+    // spurious "no data" error on top just because the resync left the
+    // tokenizer back in a clean START state at EOF (same `hadError`
+    // reasoning as the trailing-newline test in the issue #50 block above).
+    it('should report exactly one error (and no spurious "no data" at EOF) ' +
+        'when the error newline is the last byte of the stream', () =>
+        runChunks(['"abc\n']).then(({ values, errors }) => {
+            expect(errors, errors.map((e) => e.message).join('; ')).to.have.lengthOf(1);
+            expect(errors[0].message).to.match(/Unexpected/);
+            expect(values).to.have.lengthOf(0);
+        }), 2000);
+});
+
 // Regression tests for https://github.com/tsouza/yajs/issues/56 ("bare
 // top-level NDJSON string is lost when immediately followed by a record
 // that errors mid-string").

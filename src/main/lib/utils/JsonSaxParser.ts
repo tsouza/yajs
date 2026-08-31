@@ -1046,6 +1046,23 @@ export class JsonSaxParser {
     this.hadError = true;
     this.callbacks.onError(new Error('Unexpected ' + JSON.stringify(String.
       fromCharCode(buffer[i])) + ' at position ' + i + ' in state ' + stateName));
+    if (buffer[i] === 0x0a) { // `\n`
+      // The offending byte is itself the NDJSON record separator - the most
+      // common end-of-line corruption (a string/number/literal truncated at
+      // its own terminating newline). The `case ERROR:` branch in parse()
+      // only ever sees bytes AFTER this one, so without resyncing here it
+      // would wait for the FOLLOWING newline - consuming the entire next,
+      // individually-valid record as garbage with no error and no data.
+      // The resync point has already arrived: recover immediately, exactly
+      // as if this newline had been seen in the ERROR state, so the next
+      // byte starts a fresh document. (Ordering matters: onError above
+      // fires before onResync, same as when the two happen on different
+      // bytes.) Only charError needs this - structuralError() below can
+      // never be reached by a `\n`, since every structural error is raised
+      // from the START state, whose whitespace branch consumes 0x0a before
+      // any structural check runs.
+      this.resyncAfterError();
+    }
   }
 
   // Same terminal-error mechanism as charError() above (same ERROR state,
