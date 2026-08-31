@@ -8,33 +8,37 @@ import yajs from '../main/yajs';
 // - maxDepth is capped to keep the character-by-character SAX parser fast
 //   across hundreds of runs (deep nesting is already exercised by the
 //   dedicated example-based tests, not the concern of this property).
-// - Numbers are restricted to fc.integer() - deliberately excluding
-//   fc.float()/fc.double(). This is NOT routing around expected
-//   floating-point noise (e.g. NaN/Infinity not being valid JSON) - it is
-//   avoiding a genuine, verified precision bug in yajs's own number parser.
-//   src/main/lib/utils/JsonSaxParser.ts accumulates the mantissa digit by
-//   digit and, for a value with an exponent, finishes with
-//   `this.magnatude *= Math.pow(10, this.exponent)` (see around line 472).
-//   That is not how correctly-rounded decimal-to-double parsing works, and
-//   it measurably isn't: a manual fuzz run of 20000 random doubles with
-//   exponents in just [-10, 10] (nothing exotic - ordinary numbers like
+// - Numbers used to be restricted to fc.integer(), deliberately excluding
+//   fc.float()/fc.double(), to route around a genuine precision bug in
+//   yajs's own number parser (GitHub issue #49):
+//   src/main/lib/utils/JsonSaxParser.ts used to accumulate the mantissa
+//   digit by digit and, for a value with an exponent, finish with
+//   `this.magnatude *= Math.pow(10, this.exponent)`. That is not how
+//   correctly-rounded decimal-to-double parsing works, and it measurably
+//   wasn't: a manual fuzz run of 20000 random doubles with exponents in
+//   just [-10, 10] (nothing exotic - ordinary numbers like
 //   -26491.059396597953 or 963160204.3665955) found yajs's parsed value
 //   differed from the value JSON.stringify produced roughly 59% of the
-//   time, always by a small number of ULPs (e.g. `963160204.3665955` comes
-//   back as `963160204.3665954`). Even fixed low-digit decimals aren't
-//   safe: `JSON.stringify(0.3)` is `"0.3"`, which native JSON.parse reads
-//   back as exactly `0.3`, but yajs reads it back as
-//   `0.30000000000000004`. fc.integer() sidesteps this because yajs's
-//   digit-by-digit accumulation for a plain integer mantissa (no decimal
-//   point, no exponent, so the lossy `Math.pow` step never runs) is exact
-//   for values in JS's safe-integer range, which is exactly the range
-//   fc.integer()'s default bounds live in. See remainingIssues in the task
-//   report for the full writeup and a dedicated regression test just
-//   below.
+//   time. fc.integer() sidestepped this because yajs's digit-by-digit
+//   accumulation for a plain integer mantissa (no decimal point, no
+//   exponent, so the lossy Math.pow step never ran) was exact for values in
+//   JS's safe-integer range, which is exactly the range fc.integer()'s
+//   default bounds live in.
+//
+//   Fixed: JsonSaxParser now accumulates the raw number literal as text
+//   while tokenizing and hands the complete literal to `Number()` once the
+//   token is known (the engine's own correctly-rounded string-to-double
+//   conversion), instead of re-implementing that conversion by hand - see
+//   the comment on flushPendingNumber() in JsonSaxParser.ts. fc.float() and
+//   fc.double() are back below, and the dedicated regression test that used
+//   to track this as a known bug (just below, in the describe block) is now
+//   a normal passing assertion.
 const jsonPrimitive = fc.oneof(
     fc.constant(null),
     fc.boolean(),
     fc.integer(),
+    fc.float(),
+    fc.double(),
     fc.string(),
 );
 
@@ -186,15 +190,12 @@ describe('yajs property-based round-trip', () => {
             { numRuns: NUM_RUNS },
         ));
 
-    // Tracked regression for the bug described above the jsonPrimitive
-    // arbitrary: yajs's own number parser doesn't correctly round-trip
-    // most non-integer JSON numbers. `it.fails` means this test passing
-    // (i.e. the assertion inside failing, as it does today) is the
-    // expected, green outcome; if a future fix to JsonSaxParser's number
-    // parsing makes the assertion pass, `it.fails` itself will start
-    // failing ("unexpectedly passed"), as a signal to promote this to a
-    // normal `it` and drop the fc.integer()-only restriction above.
-    it.fails('known bug: yajs mis-parses some non-integer JSON numbers (see jsonPrimitive comment)', async () => {
+    // Fixed regression for GitHub issue #49 (see the jsonPrimitive comment
+    // above): yajs's number parser used to mis-parse most non-integer JSON
+    // numbers via lossy digit-by-digit mantissa accumulation. Promoted from
+    // the `it.fails` this used to be once JsonSaxParser's number tokenizer
+    // was switched to a single `Number(literal)` conversion.
+    it('correctly round-trips a non-integer JSON number (see jsonPrimitive comment)', async () => {
         const json = JSON.stringify(0.3);
         const actual = await runYajs(Buffer.from(json));
         expect(actual[0].value).to.equal(0.3);
@@ -202,12 +203,12 @@ describe('yajs property-based round-trip', () => {
 
     // Tracked regression for the bug described above rootSafeValueArbitrary:
     // a document that is nothing but an empty string can't be parsed at
-    // all. Same `it.fails` contract as the number-precision regression
-    // above - this staying green means the bug is still present; if it
-    // ever starts failing ("unexpectedly passed"), drop the `!== ''`
-    // filters on rootSafeValueArbitrary and the chunking property's
-    // arbitrary above, promote this to a normal `it`, and assert the
-    // success case instead.
+    // all (unrelated to the number-precision bug above - this one is the
+    // TDQSTR2 end-of-stream lookahead gap). `it.fails` here means this test
+    // staying green means the bug is still present; if it ever starts
+    // failing ("unexpectedly passed"), drop the `!== ''` filters on
+    // rootSafeValueArbitrary and the chunking property's arbitrary above,
+    // promote this to a normal `it`, and assert the success case instead.
     it.fails('known bug: a document that is only an empty string ("") fails to parse', async () => {
         const actual = await runYajs(Buffer.from('""'));
         expect(actual).to.deep.equal([{ path: [], value: '' }]);
