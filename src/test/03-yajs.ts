@@ -1032,11 +1032,14 @@ describe('yajs', () => {
                 expect(array).to.have.lengthOf(depth);
                 // Pre-#44 (i.e. with only issue #34's backward-scan fix)
                 // measured ~11.7s at this depth; post-#44 measures roughly
-                // 0.8-1.1s locally. A generous upper bound for a slow CI
-                // machine - comfortably below what an accidental revert of
-                // #44 (while #34 stays fixed) would produce, and nowhere
-                // near what having neither fix would produce.
-                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(5000);
+                // 0.8-1.1s locally, up to ~6.5s observed on a heavily
+                // loaded shared machine (load average ~20). A generous
+                // upper bound - comfortably below what an accidental
+                // revert of #44 (while #34 stays fixed) would produce, and
+                // nowhere near what having neither fix would produce -
+                // while leaving real headroom above worst-case-observed
+                // contention so this doesn't flake under load.
+                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(9000);
             });
         }, 20000);
 
