@@ -1,5 +1,6 @@
 
 import { createReadStream } from 'fs';
+import { Readable, Writable } from 'stream';
 import { describe, expect, it } from 'vitest';
 
 import yajs from '../main/yajs';
@@ -602,6 +603,83 @@ describe('yajs', () => {
                     { path: [ 'array', 'key2', 'child' ], value: 'value2' },
                 ]);
             }));
+    });
+
+    // Regression test for GitHub issue #36: matches used to be delivered via
+    // stream.emit('data', ...) directly, which completely bypasses `through`'s
+    // own queue()/drain() buffering - the only mechanism that actually checks
+    // `stream.paused`. That meant a slow/paused downstream consumer (exactly
+    // what Node's .pipe() backpressure is supposed to produce) had zero effect
+    // on delivery: every match found while parsing a single write() chunk was
+    // dumped downstream synchronously and immediately, regardless of how far
+    // behind the consumer was - unbounded in-flight lag, bounded only by
+    // however many matches happened to land in one upstream chunk. Fixed by
+    // routing matches (and end-of-stream) through stream.queue()/push()
+    // instead. See yajs.ts.
+    describe('stream backpressure (issue #36)', () => {
+
+        it('keeps in-flight lag bounded near the downstream highWaterMark instead of unbounded, when a slow consumer is fed many matches in one chunk', () => {
+            const N = 500;
+            const HWM = 16;
+
+            // One NDJSON payload delivered as a SINGLE chunk - mirrors a
+            // real fs.createReadStream chunk packed with many documents,
+            // which is exactly the scenario the issue measured.
+            let payload = '';
+            for (let i = 0; i < N; i++) {
+                payload += JSON.stringify({ id: i }) + '\n';
+            }
+            const buf = Buffer.from(payload);
+            const source = new Readable({
+                read() {
+                    this.push(buf);
+                    this.push(null);
+                },
+            });
+
+            let emitted = 0;
+            let consumed = 0;
+            let maxLag = 0;
+
+            const stream = yajs('$');
+            stream.on('data', () => {
+                emitted++;
+                maxLag = Math.max(maxLag, emitted - consumed);
+            });
+
+            const sink = new Writable({
+                objectMode: true,
+                highWaterMark: HWM,
+                write(_chunk, _enc, callback) {
+                    // Simulate a slow downstream consumer (DB writer, rate-limited
+                    // API client, etc.) - defer the callback so the sink's own
+                    // write buffer, and therefore Node's backpressure signal
+                    // back to `stream`, actually has time to build up.
+                    setImmediate(() => {
+                        consumed++;
+                        callback();
+                    });
+                },
+            });
+
+            return new Promise<void>((resolve, reject) => {
+                source.pipe(stream).pipe(sink);
+                stream.on('error', reject);
+                sink.on('error', reject);
+                sink.on('finish', () => {
+                    try {
+                        expect(emitted).to.equal(N);
+                        expect(consumed).to.equal(N);
+                        // Bounded near the consumer's own highWaterMark, not
+                        // anywhere near N (unbounded) as it was before the fix.
+                        expect(maxLag).to.be.at.most(HWM * 2);
+                        resolve();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            });
+        });
     });
 });
 
