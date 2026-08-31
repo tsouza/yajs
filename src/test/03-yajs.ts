@@ -257,6 +257,76 @@ describe('yajs', () => {
                 }));
     });
 
+    // Regression tests for GitHub issue #66: the project keys-filter dispatch
+    // in ObjectDispatcher.ts verified key presence with `key in result`, and
+    // since built result objects deliberately keep Object.prototype (see the
+    // issue #12 tests above), the prototype-walking `in` operator reported
+    // every inherited Object.prototype member name (toString, constructor,
+    // valueOf, hasOwnProperty, __proto__, ...) as present - making such
+    // projections match objects that don't actually carry the key, and making
+    // negated boolean project expressions like {x && !toString} never match.
+    // Fixed via an own-property check in ObjectDispatcher.ts.
+    describe('project keys colliding with Object.prototype member names (issue #66)', () => {
+
+        it('does not match {toString} when the object has no own "toString" key', () =>
+            testJson('{"a":{"b":1}}', '$.a{toString}').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('does not match {__proto__} when the object has no own "__proto__" key', () =>
+            testJson('{"a":{"b":1}}', '$.a{__proto__}').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('does not match {constructor} when the object has no own "constructor" key', () =>
+            testJson('{"a":{"b":1}}', '$.a{constructor}').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('does not match {hasOwnProperty} when the object has no own "hasOwnProperty" key', () =>
+            testJson('{"a":{"b":1}}', '$.a{hasOwnProperty}').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still matches {toString} when the object genuinely has an own "toString" key', () =>
+            testJson('{"a":{"toString":1}}', '$.a{toString}').then((array) => {
+                expect(array).to.be.lengthOf(1);
+                expect(array[0].value).to.be.deep.equal({ toString: 1 });
+            }));
+
+        it('still matches {__proto__} when the object genuinely has an own "__proto__" key', () =>
+            testJson('{"a":{"__proto__":1}}', '$.a{__proto__}').then((array) => {
+                expect(array).to.be.lengthOf(1);
+                // Compare against JSON.parse, not an `{ __proto__: 1 }` object
+                // literal - see the issue #13 tests above for why.
+                expect(array[0].value).to.be.deep.equal(JSON.parse('{"__proto__":1}'));
+                expect(Object.prototype.hasOwnProperty.call(array[0].value, '__proto__')).to.be.true;
+            }));
+
+        it('honors a negated Object.prototype member name inside a boolean project expression', () =>
+            testJson('{"a":{"x":1}}', '$.a{x && !toString}').then((array) => {
+                expect(array).to.be.lengthOf(1);
+                expect(array[0].value).to.be.deep.equal({ x: 1 });
+            }));
+
+        it('still does not match a plain absent key (control)', () =>
+            testJson('{"a":{"b":1}}', '$.a{missing}').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still matches when one project key is present (gate semantics control)', () =>
+            testJson('{"a":{"x":1,"y":2}}', '$.a{x}').then((array) => {
+                expect(array).to.be.lengthOf(1);
+                expect(array[0].value).to.be.deep.equal({ x: 1, y: 2 });
+            }));
+
+        it('still bypasses the keys filter for a scalar match (issue #46 control)', () =>
+            testJson('{"a":5}', '$.a{x}').then((array) => {
+                expect(array).to.be.lengthOf(1);
+                expect(array[0].value).to.equal(5);
+            }));
+    });
+
     // Regression test for GitHub issue #17: a filter key containing an
     // apostrophe used to be interpolated unescaped into a JS string literal
     // in generated code compiled via vm.runInContext (`args['${key}']`), so
