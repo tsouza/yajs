@@ -67,6 +67,32 @@ interface RenderedTerm {
     text: string;
 }
 
+// Drop-keys (`<...>`) shares the same `filterExpression` grammar rule as
+// project (`{...}`) and filter (`[...]`), so `&&`/`||`/`!`/parens all parse
+// without error there too - but Visitor.visitActionDropKeys only ever calls
+// extractKeys(), which just flattens every leaf key token into a plain list,
+// discarding the boolean structure entirely. That silently turned e.g.
+// `<key1 && key2>` and `<!key1>` into the exact same "drop every named key
+// unconditionally" behavior as a plain `<key1 key2>` list, with no error or
+// indication that the operators the user wrote had no effect (issue #29).
+// Drop-keys' flat "these keys are always dropped" semantics don't have an
+// unambiguous meaning for AND/OR/NOT/parens in the first place (unlike
+// project/filter, which evaluate the whole expression once to a single
+// true/false gate - dropping is inherently per-key, so it's not clear what
+// "drop key1 || key2" or "drop !key1" would even mean), so - consistent
+// with how issues #18/#19 made other malformed-selector cases fail cleanly
+// at parse time instead of silently misbehaving - this rejects any
+// drop-keys expression that isn't a flat, space-separated list of bare key
+// names, rather than quietly discarding the operators the user wrote.
+export function assertFlatKeyExpression(ctx: FilterExpressionContext): void {
+    const isBareKeyTerm = (term: FilterExpressionTermContext) => !!(term._key && term._key.text);
+    if (!ctx.filterExpressionTerm().every(isBareKeyTerm)) {
+        throw new Error('Drop-keys (<...>) doesn\'t support boolean operators ' +
+            '(&&, ||, !) or parentheses - it only accepts a flat, ' +
+            'space-separated list of key names to always drop, e.g. <key1 key2>.');
+    }
+}
+
 export function buildArgsExpression(ctx: FilterExpressionContext): string {
     return renderExpression(ctx);
 }

@@ -5,7 +5,7 @@ import { ChildNode } from './operator/ChildNode';
 import { Descendant } from './operator/Descendant';
 import { Root } from './operator/Root';
 import { Wildcard } from './operator/Wildcard';
-import { buildArgsExpression, extractKeys } from './parser/utils';
+import { assertFlatKeyExpression, buildArgsExpression, extractKeys } from './parser/utils';
 import { YAJSLexer } from './parser/YAJSLexer';
 import { ActionDropKeysContext, ActionProjectContext,
     PathStepContext, YAJSParser } from './parser/YAJSParser';
@@ -117,7 +117,30 @@ export class YAJSPath {
 
             if (o1Type === PathOperator.Type.DESCENDANT) {
                 const prevScan = this.stack[pointer1--];
-                while (!prevScan.match(o2) && pointer2 >= 0) {
+                // An intervening ARRAY position must always be treated as
+                // transparent scaffolding for this backward "how far back
+                // does '..' need to reach" scan - it can never itself be
+                // the ancestor prevScan is looking for, no matter what
+                // prevScan is. ChildNode.match()/Wildcard.match() both
+                // return true unconditionally against an ARRAY-typed
+                // operand (see their own match()/matches()), which is
+                // correct for the single-hop "array is transparent for its
+                // parent key" transparency used elsewhere in this method,
+                // but WRONG here: it used to let the scan stop at the
+                // first array it met, even when the real key prevScan is
+                // looking for lies further back, past that array (a false
+                // negative - issue #27's `$.a..b` repro), or let it stop
+                // and accept an ancestor that doesn't actually establish
+                // what the scan is looking for, letting an unrelated array
+                // masquerade as a match for a key that's never actually
+                // present anywhere (a false positive - issue #27's
+                // `$..x..y` repro). Skipping every ARRAY level here,
+                // unconditionally, and only ever testing prevScan.match()
+                // against a real (non-ARRAY) ancestor position fixes both:
+                // the scan keeps walking back through as many arrays as
+                // necessary until it either finds a genuine match or runs
+                // out of position stack.
+                while (pointer2 >= 0 && (o2.getType() === PathOperator.Type.ARRAY || !prevScan.match(o2))) {
                     o2 = jsonPath.stack[pointer2--];
                 }
             } else if (o2.getType() === PathOperator.Type.ARRAY) {
@@ -155,6 +178,51 @@ export class YAJSPath {
                 if (o1Type !== PathOperator.Type.WILDCARD) {
                     pointer1++;
                 }
+            } else if (o1Type === PathOperator.Type.WILDCARD &&
+                pointer2 >= 0 && jsonPath.stack[pointer2].getType() === PathOperator.Type.ARRAY &&
+                pointer1 >= 0 && this.stack[pointer1].getType() !== PathOperator.Type.WILDCARD &&
+                this.stack[pointer1].getType() !== PathOperator.Type.DESCENDANT) {
+                // o2 here is NOT itself ARRAY-typed (that's the branch
+                // above), so this Wildcard is being asked to directly match
+                // some ordinary object-key position. Wildcard.match() is
+                // unconditionally true regardless of its operand (issue
+                // #20), so - unlike ChildNode, which can reject a wrong key
+                // via matches() - Wildcard itself has no way to notice when
+                // o2 is actually nested ONE level INSIDE an array (i.e. o2
+                // is a property of one of the array's elements) rather than
+                // being a direct child of whatever precedes this Wildcard in
+                // the pattern. That distinction is only visible here, one
+                // level up the position stack: if what's immediately above
+                // o2 is itself an ARRAY, then o2 belongs to one of that
+                // array's elements, and matching it here would let '$.*'
+                // silently reach past the array's elements into their own
+                // properties (issue #28) - spurious extra matches at best,
+                // and at worst a second concurrent match on the same
+                // object's subtree racing/corrupting the real element match
+                // (issue #28's `{"x":{"deep":1}}` repro).
+                //
+                // BUT this must only reject when the pattern operator that
+                // will next take responsibility for that array (this.stack
+                // at the now-decremented pointer1 - i.e. whatever precedes
+                // this Wildcard in the pattern) is Root or ChildNode: those
+                // only ever expect to consume exactly one array this way
+                // (their own direct parent array, per the branch above), so
+                // an array showing up one level further in than that is a
+                // genuine overshoot. A WILDCARD or DESCENDANT immediately
+                // preceding this one, by contrast, is *designed* to tolerate
+                // exactly this - a run of consecutive Wildcards each resolve
+                // one hop at a time down to the array (e.g. '$.*.*' reaching
+                // a property inside an array's element, where the first
+                // Wildcard is what will legitimately consume the array on
+                // the very next iteration), and Descendant explicitly allows
+                // unbounded intervening depth by design (e.g. '$..*' must
+                // still reach a property nested inside an array's element,
+                // not just the array's own elements - the Descendant's own
+                // backward scan above is what actually re-validates the
+                // full ancestor chain, including that array). Rejecting
+                // those too would silently drop real matches instead of
+                // just excess ones.
+                return false;
             } else if (!o1.match(o2)) {
                 return false;
             }
@@ -322,6 +390,7 @@ export namespace YAJSPath {
         }
 
         visitActionDropKeys(ctx: ActionDropKeysContext): YAJSPath.Builder {
+            assertFlatKeyExpression(ctx.filterExpression());
             this.builder.setDropKeys(extractKeys(ctx.filterExpression()));
             return this.builder;
         }

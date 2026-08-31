@@ -474,6 +474,108 @@ describe('yajs', () => {
                 expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
             }));
     });
+
+    // Regression tests for GitHub issue #27: a descendant scan ('..')
+    // preceded by a named key or wildcard used to silently mismatch through
+    // arrays - see 02-path.ts for the detailed root-cause writeup and unit
+    // tests directly on YAJSPath.match(); these confirm the fix end-to-end
+    // through the real parser and streaming machinery.
+    describe('descendant scan through arrays (issue #27)', () => {
+
+        it('finds a match past an array preceded by a named key (own repro: $.a..b vs {"a":[{"b":2}]})', () =>
+            testJson('{"a":[{"b":2}]}', '$.a..b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([2]);
+            }));
+
+        it('still finds a match with no array involved at all (regression guard)', () =>
+            testJson('{"a":{"y":{"b":2}}}', '$.a..b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([2]);
+            }));
+
+        it('finds a match past an array preceded by a wildcard, not just a named key (own repro: $.*..b)', () =>
+            testJson('{"a":[{"b":2}]}', '$.*..b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([2]);
+            }));
+
+        it('finds a match past an array in a longer chain ($.a.b..c)', () =>
+            testJson('{"a":{"b":[{"c":5}]}}', '$.a.b..c').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([5]);
+            }));
+
+        it('does not spuriously match through an array when the sought key never occurs anywhere (own repro: $..x..y - "x" is never present)', () =>
+            testJson('{"foo":{"bar":[{"y":"oops"}]}}', '$..x..y').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('finds a match past two consecutive nested arrays (adversarial)', () =>
+            testJson('{"a":[[{"c":1}]]}', '$.a..c').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1]);
+            }));
+    });
+
+    // Regression tests for GitHub issue #28: '$.*' reaching an array of
+    // objects used to spuriously match nested field values in addition to
+    // the correct whole-element matches, and in the worst case a spurious
+    // match's own dispatcher would hijack events meant for the real element
+    // match, corrupting it (dropping a key). See 02-path.ts for the
+    // detailed root-cause writeup and unit tests directly on
+    // YAJSPath.match(); these confirm the fix end-to-end.
+    describe('wildcard leak through array elements (issue #28)', () => {
+
+        it('matches only each whole element, not their field values (own repro: $.* vs [{"x":1,"y":2},{"x":3,"y":4}])', () =>
+            testJson('[{"x":1,"y":2},{"x":3,"y":4}]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([
+                    { x: 1, y: 2 }, { x: 3, y: 4 } ]);
+            }));
+
+        it('does not corrupt the real element match by dropping a key to a spurious concurrent match (own repro: $.* vs [{"x":{"deep":1}}])', () =>
+            testJson('[{"x":{"deep":1}}]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([ { x: { deep: 1 } } ]);
+            }));
+
+        it('does not leak when the nested field\'s own value is an array, not just an object (adversarial variant)', () =>
+            testJson('[{"x":[1,2],"y":3}]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([ { x: [1, 2], y: 3 } ]);
+            }));
+
+        it('does not leak three levels deep (adversarial)', () =>
+            testJson('[{"x":{"deep":{"deeper":1}}}]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([ { x: { deep: { deeper: 1 } } } ]);
+            }));
+
+        it('still lets a chain of wildcards reach one hop at a time through an array ($.*.*, must not regress)', () =>
+            testJson('[{"a":1,"b":2},{"c":3}]', '$.*.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+
+        it('still lets a descendant-wildcard reach a property nested inside an array element ($..*, must not regress)', () =>
+            testJson('{"a":[{"x":1}]}', '$..*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, { x: 1 }]);
+            }));
+
+        it('still matches a named key inside array elements via $.*.b (issue #20, must not regress)', () =>
+            testJson('[{"b":1},{"b":2}]', '$.*.b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2]);
+            }));
+    });
+
+    // Regression test for GitHub issue #29: drop-keys (<...>) used to parse
+    // &&/||/! and parens without error but silently ignore them, always
+    // dropping every named key unconditionally. See 02-path.ts for the
+    // detailed root-cause writeup and parser-level unit tests; this
+    // confirms the parse-time rejection surfaces through the real yajs()
+    // entry point too.
+    describe('drop-keys with boolean operators (issue #29)', () => {
+
+        it('throws synchronously from yajs() for a drop-keys expression using &&, instead of silently ignoring it', () => {
+            expect(() => yajs('$<key1 && key2>')).to.throw(/boolean operators/);
+        });
+
+        it('still accepts a flat, space-separated drop-keys list end-to-end (must not regress)', () =>
+            testJson('{"key1":"a","key2":"b","key3":"c"}', '$<key1 key2>').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([ { key3: 'c' } ]);
+            }));
+    });
 });
 
 function test(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {
