@@ -1,5 +1,6 @@
 
 import { createReadStream } from 'fs';
+import { Readable, Writable } from 'stream';
 import { describe, expect, it } from 'vitest';
 
 import yajs from '../main/yajs';
@@ -342,6 +343,50 @@ describe('yajs', () => {
         it('rejects a selector with a leading bare || with no left-hand operand the same way', () => {
             expect(() => yajs('$.[||x]y')).to.throw(/has no left-hand operand/);
         });
+    });
+
+    // Regression tests for GitHub issue #35: a deeply parenthesized filter
+    // expression used to overflow the JS call stack (uncaught RangeError)
+    // straight out of the synchronous yajs() call, at a nesting depth of
+    // roughly 2,000 - inconsistent with the "malformed/pathological
+    // selectors fail cleanly" principle established by issues #18/#19/#23.
+    // The fix (see parser/utils.ts) makes the recursive tree-walk added for
+    // issue #26 iterative (an explicit stack instead of the JS call stack),
+    // and additionally avoids emitting real nested parens in the compiled
+    // JS for redundant single-term groups, since V8's own JS-source parser
+    // (used by the `new vm.Script(...)` compile step in ScriptFilterHelper)
+    // is separately recursive and was found to overflow at a similarly low
+    // depth on real nested parens - so fixing only this codebase's own walk
+    // was not sufficient on its own to fix the crash end-to-end.
+    describe('deeply nested parenthesized filter expressions (issue #35)', () => {
+
+        const data = { a: { x: 'v1' }, c: { x: 'v2' }, b: { x: 'v3' } };
+
+        it('filters correctly through a few hundred levels of redundant parenthesized nesting around a single key', () =>
+            Promise.all([
+                testJson(JSON.stringify(data), `$..[${'('.repeat(300)}a${')'.repeat(300)}]x`),
+                testJson(JSON.stringify(data), '$..[a]x'),
+            ]).then(([nested, plain]) => {
+                expect(nested.map((e) => e.value)).to.deep.equal(['v1']);
+                expect(nested.map((e) => e.value)).to.deep.equal(plain.map((e) => e.value));
+            }));
+
+        it('does not throw a RangeError and still filters correctly at the depth from the issue\'s own repro (2,500 levels)', () =>
+            // 2,500 stays with comfortable margin below the ANTLR-generated
+            // parser's own separate, third-party nesting ceiling for simply
+            // building a parse tree (confirmed empirically to be ~3,000
+            // under a worker-thread test runner like this one, and
+            // ~4,000-5,000 on the main thread - see 01-parser.ts's issue #35
+            // tests), so this stays a reliable regression test for this
+            // codebase's own fix rather than depending on exactly where that
+            // other, out-of-scope ceiling happens to sit.
+            Promise.all([
+                testJson(JSON.stringify(data), `$..[${'('.repeat(2500)}a${')'.repeat(2500)}]x`),
+                testJson(JSON.stringify(data), '$..[a]x'),
+            ]).then(([nested, plain]) => {
+                expect(nested.map((e) => e.value)).to.deep.equal(['v1']);
+                expect(nested.map((e) => e.value)).to.deep.equal(plain.map((e) => e.value));
+            }));
     });
 
     // Regression tests for GitHub issues #14 and #15: a matched array's
@@ -826,6 +871,110 @@ describe('yajs', () => {
                 expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(3000);
             });
         }, 10000);
+    });
+
+    // Regression tests for GitHub issue #37: AbstractFilteredOperator.
+    // matchFilter() discarded the key-name-equality `matches` boolean
+    // whenever a filter expression was attached, so '[<filter>]<key>'
+    // matched every sibling key inside a filter-satisfying ancestor instead
+    // of just the one literally named <key>. See 02-path.ts for the
+    // parser-level unit tests pinning the fix in matchFilter() itself; these
+    // confirm it end-to-end through the real yajs() entry point.
+    describe('filter does not drop the key-name check (issue #37)', () => {
+
+        it('matches only the named key, not every sibling, inside a filtered ancestor ' +
+            '($..[key1]child vs {"key1":{"child":1,"other":2}})', () =>
+            testJson('{"key1":{"child":1,"other":2}}', '$..[key1]child').then((array) => {
+                expect(array).to.deep.equal([ { path: [ 'key1', 'child' ], value: 1 } ]);
+            }));
+
+        it('produces exactly the README\'s documented output for $..[!key1]child ' +
+            '(must not regress into spurious extra/duplicate entries)', () =>
+            testJson(
+                '{"array":[{"key1":{"child":"value1"}},{"key2":{"child":"value2"}}]}',
+                '$..[!key1]child').
+            then((array) => {
+                expect(array).to.deep.equal([
+                    { path: [ 'array', 'key2', 'child' ], value: 'value2' },
+                ]);
+            }));
+    });
+
+    // Regression test for GitHub issue #36: matches used to be delivered via
+    // stream.emit('data', ...) directly, which completely bypasses `through`'s
+    // own queue()/drain() buffering - the only mechanism that actually checks
+    // `stream.paused`. That meant a slow/paused downstream consumer (exactly
+    // what Node's .pipe() backpressure is supposed to produce) had zero effect
+    // on delivery: every match found while parsing a single write() chunk was
+    // dumped downstream synchronously and immediately, regardless of how far
+    // behind the consumer was - unbounded in-flight lag, bounded only by
+    // however many matches happened to land in one upstream chunk. Fixed by
+    // routing matches (and end-of-stream) through stream.queue()/push()
+    // instead. See yajs.ts.
+    describe('stream backpressure (issue #36)', () => {
+
+        it('keeps in-flight lag bounded near the downstream highWaterMark instead of unbounded, when a slow consumer is fed many matches in one chunk', () => {
+            const N = 500;
+            const HWM = 16;
+
+            // One NDJSON payload delivered as a SINGLE chunk - mirrors a
+            // real fs.createReadStream chunk packed with many documents,
+            // which is exactly the scenario the issue measured.
+            let payload = '';
+            for (let i = 0; i < N; i++) {
+                payload += JSON.stringify({ id: i }) + '\n';
+            }
+            const buf = Buffer.from(payload);
+            const source = new Readable({
+                read() {
+                    this.push(buf);
+                    this.push(null);
+                },
+            });
+
+            let emitted = 0;
+            let consumed = 0;
+            let maxLag = 0;
+
+            const stream = yajs('$');
+            stream.on('data', () => {
+                emitted++;
+                maxLag = Math.max(maxLag, emitted - consumed);
+            });
+
+            const sink = new Writable({
+                objectMode: true,
+                highWaterMark: HWM,
+                write(_chunk, _enc, callback) {
+                    // Simulate a slow downstream consumer (DB writer, rate-limited
+                    // API client, etc.) - defer the callback so the sink's own
+                    // write buffer, and therefore Node's backpressure signal
+                    // back to `stream`, actually has time to build up.
+                    setImmediate(() => {
+                        consumed++;
+                        callback();
+                    });
+                },
+            });
+
+            return new Promise<void>((resolve, reject) => {
+                source.pipe(stream).pipe(sink);
+                stream.on('error', reject);
+                sink.on('error', reject);
+                sink.on('finish', () => {
+                    try {
+                        expect(emitted).to.equal(N);
+                        expect(consumed).to.equal(N);
+                        // Bounded near the consumer's own highWaterMark, not
+                        // anywhere near N (unbounded) as it was before the fix.
+                        expect(maxLag).to.be.at.most(HWM * 2);
+                        resolve();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            });
+        });
     });
 });
 

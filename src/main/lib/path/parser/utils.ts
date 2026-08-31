@@ -26,6 +26,29 @@ import { FilterExpressionContext, FilterExpressionTermContext } from './YAJSPars
 // keep them in sync when interpreting `_key`/`_expr`/`_op`+`_term`.
 // -----------------------------------------------------------------------
 
+// -----------------------------------------------------------------------
+// Iterative tree-walk (issue #35)
+//
+// Every level of paren/AND/OR/NOT nesting in a filterExpression corresponds
+// to one level of this tree. The walk used to be plain JS recursion (one
+// call frame per level), which ties the maximum supported nesting depth to
+// the JS call stack - and for this particular walk, that overflows
+// (uncaught RangeError) at a nesting depth of roughly 2,000, LOWER than the
+// depth the ANTLR-generated parser itself can already build a tree for
+// (~4,000). A pathological but not otherwise-invalid selector string could
+// therefore crash the process via this code specifically, before the
+// selector was even rejected as invalid - inconsistent with the "malformed
+// selectors fail cleanly" principle established by issues #18/#19/#23.
+//
+// Both walks below (key extraction and expression rendering) instead use
+// an explicit array-based stack in place of the JS call stack, so the
+// nesting depth they support is bounded only by available heap memory
+// rather than by V8's comparatively small, non-configurable-from-userland
+// call stack. In practice this removes the ceiling entirely for any
+// nesting depth the ANTLR parser itself is still able to produce a tree
+// for - i.e. this walk is no longer the weakest link in the pipeline.
+// -----------------------------------------------------------------------
+
 export function extractKeys(ctx: FilterExpressionContext): string[] {
     // Use a null-prototype object so that a key named "__proto__" becomes a
     // real own property instead of being routed through Object.prototype's
@@ -36,22 +59,49 @@ export function extractKeys(ctx: FilterExpressionContext): string[] {
     return Object.keys(result);
 }
 
+// Work-list entry for the iterative key-extraction walk: either a whole
+// sibling list (a FilterExpressionContext, e.g. a parenthesized group's
+// body) or a single term to inspect.
+type KeyWorkItem =
+    | { kind: 'expr'; ctx: FilterExpressionContext }
+    | { kind: 'term'; ctx: FilterExpressionTermContext };
+
 function doExtractKeysFromExpression(ctx: FilterExpressionContext, keys: any): void {
-    ctx.filterExpressionTerm().forEach((c: FilterExpressionTermContext) => doExtractKeys(c, keys));
+    // Explicit LIFO stack standing in for the call stack it replaces.
+    // Siblings/children are pushed in reverse order so they're popped
+    // (visited) left-to-right, and a term's own children are always pushed
+    // - and therefore fully drained - before its next sibling is reached,
+    // exactly reproducing the original recursion's depth-first,
+    // left-to-right visitation order (extractKeys()'s returned key order
+    // matches selector source order, which callers/tests rely on).
+    const stack: KeyWorkItem[] = [{ kind: 'expr', ctx }];
+    while (stack.length > 0) {
+        const item = stack.pop() as KeyWorkItem;
+        if (item.kind === 'expr') {
+            const terms = item.ctx.filterExpressionTerm();
+            for (let i = terms.length - 1; i >= 0; i--) {
+                stack.push({ kind: 'term', ctx: terms[i] });
+            }
+        } else {
+            doExtractKeys(item.ctx, keys, stack);
+        }
+    }
 }
 
-function doExtractKeys(ctx: FilterExpressionTermContext, keys: any): void {
+function doExtractKeys(ctx: FilterExpressionTermContext, keys: any, stack: KeyWorkItem[]): void {
     if (ctx._key && ctx._key.text) {
         keys[ctx._key.text] = true;
     } else if (ctx._expr) {
         // Parenthesized group: `(expr)` - ctx._expr is a FilterExpressionContext
         // (a nested term list), not a FilterExpressionTermContext, so it needs
-        // its own list-walk rather than a single-term recursion.
-        doExtractKeysFromExpression(ctx._expr, keys);
+        // its own list-walk rather than a single-term recursion. Push it back
+        // onto the shared stack instead of recursing.
+        stack.push({ kind: 'expr', ctx: ctx._expr });
     } else if (ctx._term) {
         // AND/OR/NOT-prefixed term (`&&x`, `||x`, `!x`) - the key(s) live in
-        // the nested `_term`.
-        doExtractKeys(ctx._term, keys);
+        // the nested `_term`. Push it back onto the shared stack instead of
+        // recursing.
+        stack.push({ kind: 'term', ctx: ctx._term });
     }
 }
 
@@ -97,6 +147,26 @@ export function buildArgsExpression(ctx: FilterExpressionContext): string {
     return renderExpression(ctx);
 }
 
+// Instruction set for the iterative expression-rendering walk. Each
+// instruction corresponds to one "half" of what used to be a recursive
+// call: RENDER_* instructions push work to do (mirroring entering a
+// function), and COMBINE_* instructions consume already-computed child
+// result(s) from `values` and push a combined result back (mirroring using
+// a recursive call's return value after it returns). Children are always
+// pushed in reverse order immediately below their own COMBINE_* instruction,
+// so - since this is a plain LIFO stack - they are popped and fully
+// resolved, left-to-right, strictly before that COMBINE_* instruction runs;
+// this reproduces exactly the same depth-first, left-to-right,
+// combine-on-the-way-back-up evaluation order as the original recursion.
+type RenderInstr =
+    | { op: 'RENDER_EXPR'; ctx: FilterExpressionContext }
+    | { op: 'COMBINE_EXPR'; terms: FilterExpressionTermContext[] }
+    | { op: 'RENDER_TERM'; ctx: FilterExpressionTermContext }
+    | { op: 'COMBINE_PAREN' }
+    | { op: 'COMBINE_TRANSPARENT_GROUP'; innerCtx: FilterExpressionTermContext }
+    | { op: 'COMBINE_NOT'; termCtx: FilterExpressionTermContext }
+    | { op: 'COMBINE_OP_PREFIX'; opText: string; termCtx: FilterExpressionTermContext };
+
 // Renders a full sibling list (the body of a filterExpression, whether at
 // the top level or inside a parenthesized group) into one valid JS boolean
 // expression.
@@ -106,72 +176,158 @@ export function buildArgsExpression(ctx: FilterExpressionContext): string {
 // with no explicit connector - `{key1 key2}` - is joined with an implicit
 // `||`, matching the OR/`.some()` semantics the rest of the filter machinery
 // already documents for that style.
-function renderExpression(ctx: FilterExpressionContext): string {
-    let result = '';
-    ctx.filterExpressionTerm().forEach((term: FilterExpressionTermContext, index: number) => {
-        const rendered = renderTerm(term);
-        if (index === 0) {
-            if (rendered.op) {
-                // The very first term in a list has nothing to its left, so
-                // an explicit `&&`/`||` prefix here (e.g. `[&&x]`) is
-                // meaningless - fail cleanly at parse time (see issue #26,
-                // consistent with how issues #18/#19 made other malformed
-                // selectors fail cleanly) instead of emitting `&&args["x"]`,
-                // which would only surface as an opaque raw vm.runInContext
-                // SyntaxError far away from the actual selector string.
-                throw leadingOperatorError(term);
+function renderExpression(rootCtx: FilterExpressionContext): string {
+    const instrStack: RenderInstr[] = [{ op: 'RENDER_EXPR', ctx: rootCtx }];
+    // Holds intermediate results as the walk proceeds: a RenderedTerm for a
+    // single rendered term, or a string for a fully-joined sibling list
+    // (either still awaiting COMBINE_PAREN to wrap it in `(...)`, or - once
+    // the stack empties - the final rendered expression).
+    const values: Array<RenderedTerm | string> = [];
+
+    while (instrStack.length > 0) {
+        const instr = instrStack.pop() as RenderInstr;
+        switch (instr.op) {
+            case 'RENDER_EXPR': {
+                const terms = instr.ctx.filterExpressionTerm();
+                instrStack.push({ op: 'COMBINE_EXPR', terms });
+                for (let i = terms.length - 1; i >= 0; i--) {
+                    instrStack.push({ op: 'RENDER_TERM', ctx: terms[i] });
+                }
+                break;
             }
-            result = rendered.text;
-        } else {
-            result += (rendered.op || '||') + rendered.text;
+            case 'COMBINE_EXPR': {
+                const count = instr.terms.length;
+                const rendered = values.splice(values.length - count, count) as RenderedTerm[];
+                let result = '';
+                rendered.forEach((rendered_, index) => {
+                    if (index === 0) {
+                        if (rendered_.op) {
+                            // The very first term in a list has nothing to its
+                            // left, so an explicit `&&`/`||` prefix here (e.g.
+                            // `[&&x]`) is meaningless - fail cleanly at parse
+                            // time (see issue #26, consistent with how issues
+                            // #18/#19 made other malformed selectors fail
+                            // cleanly) instead of emitting `&&args["x"]`, which
+                            // would only surface as an opaque raw
+                            // vm.runInContext SyntaxError far away from the
+                            // actual selector string.
+                            throw leadingOperatorError(instr.terms[0]);
+                        }
+                        result = rendered_.text;
+                    } else {
+                        result += (rendered_.op || '||') + rendered_.text;
+                    }
+                });
+                values.push(result);
+                break;
+            }
+            case 'RENDER_TERM': {
+                const ctx = instr.ctx;
+                if (ctx._key && ctx._key.text) {
+                    // JSON.stringify (not manual `'${...}'` wrapping) so a key
+                    // containing a quote, backslash, or control character
+                    // produces a correctly-escaped string literal instead of
+                    // breaking out of it - this string is compiled as real
+                    // JavaScript via vm.runInContext in ScriptFilterHelper, so
+                    // unescaped interpolation here is exactly the kind of bug
+                    // that leads to code injection (issue #17).
+                    const rendered: RenderedTerm = { op: null, text: `args[${JSON.stringify(ctx._key.text)}]` };
+                    values.push(rendered);
+                } else if (ctx._expr) {
+                    // Parenthesized group: `(expr)`. ctx._expr is the nested
+                    // FilterExpressionContext holding the group's own term
+                    // list - render it (via the shared stack) and wrap the
+                    // result in real parens once it's ready.
+                    //
+                    // Exception: a group containing exactly one term (no
+                    // `&&`/`||` join happening inside it) never needs real
+                    // parens around it - a lone term always renders to
+                    // something already atomic enough (a bare `args[...]`, a
+                    // unary `!(...)`, or an already-parenthesized nested
+                    // multi-term group) that wrapping it again can't change
+                    // how it combines with whatever operator surrounds it.
+                    // Rendering it "transparently" (no extra parens) instead
+                    // of always wrapping matters for more than just tidiness:
+                    // a long chain of single-term groups (`((((key1))))`)
+                    // would otherwise still produce real nested parens in the
+                    // compiled JS matching the selector's nesting depth -
+                    // and *that* string then gets compiled via `new
+                    // vm.Script()` in ScriptFilterHelper, which has its own,
+                    // separately recursive JS-source parser (V8's, entirely
+                    // outside this codebase's control) that overflows on
+                    // deeply nested real parens at roughly the same low
+                    // depth this tree-walk itself used to (issue #35) - so
+                    // making only this walk iterative isn't sufficient on
+                    // its own to fix the reported crash end-to-end.
+                    const innerTerms = ctx._expr.filterExpressionTerm();
+                    if (innerTerms.length === 1) {
+                        instrStack.push({ op: 'COMBINE_TRANSPARENT_GROUP', innerCtx: innerTerms[0] });
+                        instrStack.push({ op: 'RENDER_TERM', ctx: innerTerms[0] });
+                    } else {
+                        instrStack.push({ op: 'COMBINE_PAREN' });
+                        instrStack.push({ op: 'RENDER_EXPR', ctx: ctx._expr });
+                    }
+                } else if (ctx._op && ctx._term) {
+                    // AND/OR/NOT-prefixed term: render the operand (`ctx._term`)
+                    // first via the shared stack, then combine once it's ready.
+                    // A leading AND/OR (or a not-yet-resolved AND/OR) found on
+                    // that operand has no left-hand side available - the same
+                    // "no left operand" problem as a leading operator at the
+                    // start of a sibling list - so it's rejected the same way,
+                    // in the COMBINE_* step below.
+                    if (ctx._op.text === '!') {
+                        instrStack.push({ op: 'COMBINE_NOT', termCtx: ctx._term });
+                    } else {
+                        instrStack.push({ op: 'COMBINE_OP_PREFIX', opText: ctx._op.text, termCtx: ctx._term });
+                    }
+                    instrStack.push({ op: 'RENDER_TERM', ctx: ctx._term });
+                } else {
+                    /* istanbul ignore next -- exhaustive per grammar; defensive only */
+                    throw new Error('Unrecognized filter expression term');
+                }
+                break;
+            }
+            case 'COMBINE_PAREN': {
+                const inner = values.pop() as string;
+                const rendered: RenderedTerm = { op: null, text: `(${inner})` };
+                values.push(rendered);
+                break;
+            }
+            case 'COMBINE_TRANSPARENT_GROUP': {
+                // Single-term group (see RENDER_TERM's ctx._expr branch above)
+                // - pass the inner term's rendering straight through with no
+                // extra parens. Still has to run the same leading-operator
+                // check a normal (multi-term) group would have applied via
+                // COMBINE_EXPR, since this is standing in for that path.
+                const inner = values.pop() as RenderedTerm;
+                if (inner.op) {
+                    throw leadingOperatorError(instr.innerCtx);
+                }
+                values.push(inner);
+                break;
+            }
+            case 'COMBINE_NOT': {
+                const operand = values.pop() as RenderedTerm;
+                if (operand.op) {
+                    throw leadingOperatorError(instr.termCtx);
+                }
+                const rendered: RenderedTerm = { op: null, text: `!(${operand.text})` };
+                values.push(rendered);
+                break;
+            }
+            case 'COMBINE_OP_PREFIX': {
+                const operand = values.pop() as RenderedTerm;
+                if (operand.op) {
+                    throw leadingOperatorError(instr.termCtx);
+                }
+                const rendered: RenderedTerm = { op: instr.opText, text: operand.text };
+                values.push(rendered);
+                break;
+            }
         }
-    });
-    return result;
-}
-
-// Renders a term used as an *operand* - i.e. in a position with no left-hand
-// side available (the target of a unary `!`, or the right-hand side of an
-// AND/OR connector). An unresolved AND/OR prefix found here (e.g. the inner
-// term of `!&&x` or `&&&&x`) has the same "no left operand" problem as a
-// leading operator at the start of a list, so it's rejected the same way.
-function renderOperand(ctx: FilterExpressionTermContext): string {
-    const rendered = renderTerm(ctx);
-    if (rendered.op) {
-        throw leadingOperatorError(ctx);
-    }
-    return rendered.text;
-}
-
-function renderTerm(ctx: FilterExpressionTermContext): RenderedTerm {
-    if (ctx._key && ctx._key.text) {
-        // JSON.stringify (not manual `'${...}'` wrapping) so a key
-        // containing a quote, backslash, or control character produces a
-        // correctly-escaped string literal instead of breaking out of it -
-        // this string is compiled as real JavaScript via vm.runInContext
-        // in ScriptFilterHelper, so unescaped interpolation here is exactly
-        // the kind of bug that leads to code injection (issue #17).
-        return { op: null, text: `args[${JSON.stringify(ctx._key.text)}]` };
     }
 
-    if (ctx._expr) {
-        // Parenthesized group: `(expr)`. ctx._expr is the nested
-        // FilterExpressionContext holding the group's own term list -
-        // render it recursively and wrap in real parens.
-        return { op: null, text: `(${renderExpression(ctx._expr)})` };
-    }
-
-    if (ctx._op && ctx._term) {
-        if (ctx._op.text === '!') {
-            return { op: null, text: `!(${renderOperand(ctx._term)})` };
-        }
-        // AND/OR-prefixed term: the operator is a connector for whatever
-        // precedes this term in the enclosing sibling list: the connector
-        // itself isn't part of `text`.
-        return { op: ctx._op.text, text: renderOperand(ctx._term) };
-    }
-
-    /* istanbul ignore next -- exhaustive per grammar; defensive only */
-    throw new Error('Unrecognized filter expression term');
+    return values.pop() as string;
 }
 
 function leadingOperatorError(ctx: FilterExpressionTermContext): Error {
