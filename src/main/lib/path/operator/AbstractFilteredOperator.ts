@@ -19,4 +19,16 @@ export abstract class AbstractFilteredOperator extends PathOperator {
     protected matchFilter(matches: boolean, operator: PathOperator): boolean {
         return this.matchFilterDelegate(matches, operator);
     }
+
+    // Whether this operator actually carries an attached [filter] that
+    // match() will evaluate - defined as exactly the same
+    // filterHelper.isFiltered() test the constructor uses to pick
+    // matchFilterDelegate, so "filtered here" and "match() enforces a
+    // filter" can never disagree. Callers that would otherwise treat this
+    // operator's match() as unconditional/key-only (the descendant-collapse
+    // and ancestor-cache shortcuts in YAJSPath/StreamPosition) must check
+    // this first.
+    get filtered(): boolean {
+        return this.filterHelper.isFiltered();
+    }
 }

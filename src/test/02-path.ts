@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { StreamPosition } from '../main/lib/context/StreamPosition';
 import { ArrayIndex } from '../main/lib/path/operator/ArrayIndex';
 import { ChildNode } from '../main/lib/path/operator/ChildNode';
 import { YAJSPath } from '../main/lib/path/YAJSPath';
@@ -532,6 +533,276 @@ describe('path match', () => {
             position.push(new ArrayIndex());
             position.push(new ArrayIndex());
             position.push(new ChildNode('a'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+    });
+
+    // Regression tests for the wildcard-over-array-valued-key fix: a
+    // wildcard meeting an ARRAY position level is genuinely ambiguous (see
+    // the two-alternative comment in YAJSPath.matchFrom()'s ARRAY branch) -
+    // it can either CONSUME that level as its own hop (a bare top-level
+    // array's elements, '$.arr.*') or treat it as transparent scaffolding
+    // for the key above it and take that key as its hop instead (exactly
+    // ChildNode's own rule). Only the first reading was ever tried, so a
+    // '$.*'/'$.b.*' wildcard standing for a key whose value is an array
+    // never matched that key's elements at all - the key silently vanished
+    // from the output, unlike every sibling form ('$.a', '$.*.*', '$..*').
+    describe('wildcard over an array-valued key', () => {
+
+        it('matches an array-valued key\'s element position via $.* (own repro: {"a":[{"x":1}]})', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('matches a nested array-valued key\'s element position via $.b.* (own repro: {"b":{"a":[1,2]}})', () => {
+            const pattern = YAJSPath.parse('$.b.*');
+
+            const position = new YAJSPath.Builder().
+                addChild('b').
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still matches a bare top-level array position via $.* (issue #20, must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still does NOT reach a property inside an array element via $.* (issue #28\'s overshoot guard, must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('x'));
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still does NOT reach two consecutive array levels deep under a key via $.* (issue #14\'s whole-element capture, must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('lets $.*.* reach a property inside an array-valued key\'s element (transparent-array reading, consistent with $..* and $.b.*)', () => {
+            const pattern = YAJSPath.parse('$.*.*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('x'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still lets $.*.* treat the array level itself as the second hop (elements of an array-valued key, must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*.*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+    });
+
+    // Regression tests for the filtered-operator fixes: three separate
+    // paths through match() silently discarded a '[x]' filter, each turning
+    // a filtered operator into its bare (unconditional) form - a false
+    // positive in every case. See YAJSPath.matchFrom()'s descendant-collapse
+    // and ARRAY-branch comments and StreamPosition.nearestAncestorIndex().
+    describe('filters are not dropped by descendant-collapse or array consumption', () => {
+
+        it('does not collapse a FILTERED wildcard before ".." as if it were bare (own repro: $.[x]*..b vs {"y":{"b":1}} - x occurs nowhere)', () => {
+            const pattern = YAJSPath.parse('$.[x]*..b');
+
+            const position = new YAJSPath.Builder().
+                addChild('y').
+                addChild('b').
+                build();
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still rejects the same shape without ".." (control: $.[x]*.b already rejected)', () => {
+            const pattern = YAJSPath.parse('$.[x]*.b');
+
+            const position = new YAJSPath.Builder().
+                addChild('y').
+                addChild('b').
+                build();
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still matches through a filtered wildcard before ".." when its filter IS satisfied (must not become a false negative)', () => {
+            const pattern = YAJSPath.parse('$.x.[x]*..b');
+
+            const position = new YAJSPath.Builder().
+                addChild('x').
+                addChild('y').
+                addChild('q').
+                addChild('b').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('evaluates a filtered wildcard\'s filter even when it consumes an ARRAY level (own repro: $.a.[q]*.b vs {"a":[{"b":1}]} - q occurs nowhere)', () => {
+            const pattern = YAJSPath.parse('$.a.[q]*.b');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('b'));
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still rejects the same filter against an object-valued key (control: filter enforcement no longer depends on container type)', () => {
+            const pattern = YAJSPath.parse('$.a.[q]*.b');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('e').
+                addChild('b').
+                build();
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still matches a filtered wildcard consuming an ARRAY level when its filter IS satisfied (must not become a false negative)', () => {
+            const pattern = YAJSPath.parse('$.a.[a]*.b');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('b'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+    });
+
+    // Regression tests driving a real StreamPosition (not a Builder-built
+    // base position) through the exact step sequences that used to poison
+    // its issue #34 ancestor-key cache - the base linear-scan implementation
+    // is the ground truth each expectation was verified against. Two
+    // distinct bugs are pinned here:
+    //
+    // 1. Ancestor-cache corruption: cache entries used to be retired lazily
+    //    at slot *reuse* instead of eagerly at pop(), so after a branch
+    //    containing key K at depth D closed, a stale [D] entry survived; K
+    //    then settling at a shallower depth d made depths[K] = [D, d] (not
+    //    increasing), and the next reuse of slot D popped the LIVE d entry
+    //    instead of the stale D one - false negatives (a real ancestor no
+    //    longer findable) and false positives (a retired depth still
+    //    reported) depending on what happened next. Fixed by retiring
+    //    eagerly in StreamPosition.pop().
+    //
+    // 2. Filtered-ancestor cache bypass: the cache indexes ancestors by key
+    //    alone, so a '[x]key' ChildNode scan target answered from it never
+    //    had its filter evaluated at all. Fixed by falling back to the base
+    //    linear scan for filtered targets.
+    describe('streaming ancestor-key cache (issue #34) stays correct', () => {
+
+        // Walks position through the events of {"a":{"b":{"k":{"z":1}}}} -
+        // opening and fully closing a branch that settles "k" at stack
+        // index 3 - and then into a sibling "k" branch that settles "k" at
+        // the shallower index 1, the exact sequence that used to corrupt
+        // the cache.
+        function poisonThenReopen(position: StreamPosition): void {
+            position.stepIntoObject();          // index 1
+            position.updateObjectEntry('a');
+            position.stepIntoObject();          // index 2
+            position.updateObjectEntry('b');
+            position.stepIntoObject();          // index 3
+            position.updateObjectEntry('k');
+            position.stepIntoObject();          // index 4
+            position.updateObjectEntry('z');
+            position.stepOutObject();
+            position.stepOutObject();
+            position.stepOutObject();
+            position.updateObjectEntry('k');    // "k" again, now at index 1
+        }
+
+        it('still finds a "k" ancestor settled at a shallower depth after a deeper "k" branch closed (false negative repro: $..k..m vs {"a":{"b":{"k":{"z":1}}},"k":{"x":{"m":2}}})', () => {
+            const pattern = YAJSPath.parse('$..k..m');
+
+            const position = new StreamPosition();
+            poisonThenReopen(position);
+            position.stepIntoObject();          // index 2
+            position.updateObjectEntry('x');
+            position.stepIntoObject();          // index 3 - reuses the slot
+                                                // whose stale "k" entry used
+                                                // to mis-retire the live one
+            position.updateObjectEntry('m');
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('does not report the closed deeper "k" as still open (false positive repro: $.k.x..k..m vs {"a":{"b":{"k":{"z":1}}},"k":{"x":{"q":{"m":2}}}} - no second "k" above "m")', () => {
+            const pattern = YAJSPath.parse('$.k.x..k..m');
+
+            const position = new StreamPosition();
+            poisonThenReopen(position);
+            position.stepIntoObject();          // index 2
+            position.updateObjectEntry('x');
+            position.stepIntoObject();          // index 3
+            position.updateObjectEntry('q');
+            position.stepIntoObject();          // index 4
+            position.updateObjectEntry('m');
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('evaluates a filtered ChildNode scan target\'s filter instead of answering from the key-only cache (own repro: $..[x]a..b vs {"y":{"a":{"b":1}}} - x occurs nowhere)', () => {
+            const pattern = YAJSPath.parse('$..[x]a..b');
+
+            const position = new StreamPosition();
+            position.stepIntoObject();
+            position.updateObjectEntry('y');
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+            position.stepIntoObject();
+            position.updateObjectEntry('b');
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('still matches a filtered ChildNode scan target when its filter IS satisfied (control: $..[x]a..b vs {"x":{"a":{"b":1}}})', () => {
+            const pattern = YAJSPath.parse('$..[x]a..b');
+
+            const position = new StreamPosition();
+            position.stepIntoObject();
+            position.updateObjectEntry('x');
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+            position.stepIntoObject();
+            position.updateObjectEntry('b');
 
             expect(pattern.match(position)).to.equal(true);
         });
