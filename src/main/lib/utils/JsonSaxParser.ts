@@ -877,11 +877,7 @@ export class JsonSaxParser {
     this.state = START;
     this.str = undefined;
     this.unicode = undefined;
-    this.negative = undefined;
-    this.magnatude = undefined;
-    this.position = undefined;
-    this.exponent = undefined;
-    this.negativeExponent = undefined;
+    this.numStr = undefined;
     this.tdq = false;
     this.resetUtf8Decoder();
     this.awaiting = AWAIT_DOC_VALUE;
