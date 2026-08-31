@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ArrayIndex } from '../main/lib/path/operator/ArrayIndex';
 import { YAJSPath } from '../main/lib/path/YAJSPath';
 
 describe('path match', () => {
@@ -79,6 +80,64 @@ describe('path match', () => {
             expect(descendant1.match(path1)).to.equal(true);
             expect(descendant2.match(path1)).to.equal(false);
             expect(descendant3.match(path1)).to.equal(true);
+        });
+    });
+
+    // Regression tests for GitHub issue #20: a bare ArrayIndex position
+    // (built here directly via push(), the same way StreamPosition builds
+    // it while streaming) sitting immediately under Root used to make
+    // '$.*' incorrectly fail to match, even though ArrayIndex itself always
+    // matches (see ArrayIndex.match()) and Wildcard also always matches
+    // unfiltered - the root cause was in YAJSPath.match()'s array-
+    // transparency retry, not either operator's own match() logic. These
+    // pin the fix at the YAJSPath.match() level, independent of the
+    // parser/stream machinery already covered end-to-end in 03-yajs.ts.
+    describe('array (issue #20)', () => {
+        it('should match a bare top-level array position on wildcard', () => {
+            const wildcard = new YAJSPath.Builder().
+                addWildcard().
+                build();
+
+            const arrayPosition = new YAJSPath.Builder().build();
+            arrayPosition.push(new ArrayIndex());
+
+            expect(wildcard.match(arrayPosition)).to.equal(true);
+        });
+
+        it('should match a bare top-level array position on plain root (must not regress)', () => {
+            const root = new YAJSPath.Builder().build();
+
+            const arrayPosition = new YAJSPath.Builder().build();
+            arrayPosition.push(new ArrayIndex());
+
+            expect(root.match(arrayPosition)).to.equal(true);
+        });
+
+        it('should match a named key\'s array position on that key + wildcard', () => {
+            const pattern = new YAJSPath.Builder().
+                addChild('a').
+                addWildcard().
+                build();
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('should not match a different named key through an array position (wildcard\'s permissive match must not mask a key mismatch)', () => {
+            const pattern = new YAJSPath.Builder().
+                addChild('b').
+                build();
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(false);
         });
     });
 

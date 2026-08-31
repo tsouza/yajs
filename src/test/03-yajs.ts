@@ -352,6 +352,58 @@ describe('yajs', () => {
                 expect(array.map((e) => e.value)).to.deep.equal([1]);
             }));
     });
+
+    // Regression tests for GitHub issue #20: '$.*' never matched array
+    // elements, only object properties - a bare top-level array (or an
+    // array reached via a named key) produced no matches at all for a
+    // wildcard step. Root cause was in YAJSPath.match()'s array-transparency
+    // loop (see the "Wildcard is different" comment there): retrying the
+    // SAME Wildcard pattern operator against whatever lay beneath the array
+    // let its unconditional match() silently consume the pattern's own
+    // trailing Root operator's rightful match target, leaving Root with
+    // nothing left to pair against.
+    describe('wildcard matching array elements (issue #20)', () => {
+
+        it('matches each element of a flat top-level array of scalars (issue\'s own repro)', () =>
+            testJson('[1,2,3]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+
+        it('still matches each property of a top-level object (must not regress)', () =>
+            testJson('{"a":1,"b":2}', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2]);
+            }));
+
+        it('matches a named key inside each object element of a top-level array (wildcard then child)', () =>
+            testJson('[{"b":1},{"b":2}]', '$.*.b').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2]);
+            }));
+
+        it('matches each element of an array nested under a named key', () =>
+            testJson('{"arr":[1,2,3]}', '$.arr.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+
+        it('captures each element of a top-level array-of-arrays whole via a single wildcard, mirroring bare $ (one level of streaming only)', () =>
+            testJson('[[1,2],[3,4]]', '$.*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[1, 2], [3, 4]]);
+            }));
+
+        it('does not match a wrong key inside an array\'s object elements (wildcard\'s permissive match must not mask a real key mismatch)', () =>
+            testJson('{"a":[1,2,3]}', '$.b').then((array) => {
+                expect(array).to.be.lengthOf(0);
+            }));
+
+        it('still matches "..*" descendant-wildcard scans reaching into a plain array (regression guard, unaffected by the wildcard-retry fix)', () =>
+            testJson('{"a":[1,2,3]}', '$..*').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+
+        it('still streams a flat array of scalars one at a time via bare $ (regression guard, unaffected by the wildcard-retry fix)', () =>
+            testJson('[1,2,3]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+    });
 });
 
 function test(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {
