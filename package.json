@@ -8,6 +8,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
+    "bench": "cd src/bench && tsx bench.ts",
     "antlr": "antlr4ts -visitor -no-listener src/main/lib/path/parser/YAJS.g4",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
@@ -52,6 +53,8 @@
     "JSONStream": "^1.3.2",
     "measured": "^1.1.0",
     "oboe": "^2.1.4",
+    "stream-json": "3.6.0",
+    "tsx": "^4.23.13",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11"
