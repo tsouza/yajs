@@ -4,7 +4,7 @@ export abstract class AbstractObjectBuilder {
 
     fieldName?: string;
     private mStack = new Stack<IJsonNode>();
-    private mDropKeys: any;
+    private mDropKeys: any = Object.create(null);
     private mDrop;
 
     constructor() {
@@ -15,7 +15,7 @@ export abstract class AbstractObjectBuilder {
         this.mDropKeys = (dropKeys || []).reduce((obj, val) => {
             obj[val] = true;
             return obj;
-        }, {});
+        }, Object.create(null));
     }
 
     startObject(): void {
@@ -105,7 +105,16 @@ class ObjectNode implements IJsonNode {
     }
 
     handle(value: any, builder: AbstractObjectBuilder): void {
-        this.value[builder.fieldName] = value;
+        // Use defineProperty (rather than plain assignment) so that a key named
+        // "__proto__" becomes a real own data property instead of being routed
+        // through Object.prototype's inherited __proto__ setter, which would
+        // otherwise mutate this object's actual prototype chain.
+        Object.defineProperty(this.value, builder.fieldName, {
+            value,
+            writable: true,
+            enumerable: true,
+            configurable: true,
+        });
     }
 }
 

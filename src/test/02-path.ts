@@ -127,4 +127,33 @@ describe('path match', () => {
         });
     });
 
+    // Regression tests for GitHub issue #13: extractKeys()/doExtractKeys() in
+    // src/main/lib/path/parser/utils.ts used to build its keys lookup as a
+    // plain `{}` object, so `keys['__proto__'] = true` silently hit the
+    // inherited Object.prototype `__proto__` accessor's setter instead of
+    // creating a real own property - the key was never registered, so
+    // drop-keys `<...>`, project `{...}` and filter `[...]` selector syntax
+    // could never actually target a "__proto__" key.
+    describe('extractKeys with a "__proto__" key (issue #13)', () => {
+        it('should extract "__proto__" as a drop key', () => {
+            const path = YAJSPath.parse('$<__proto__>');
+            expect(path.dropKeys).to.deep.equal([ '__proto__' ]);
+        });
+
+        it('should extract "__proto__" as a project key', () => {
+            const path = YAJSPath.parse('$.prop1{__proto__}');
+            expect(path.projectKeys).to.deep.equal([ '__proto__' ]);
+        });
+
+        it('should extract "__proto__" as a filter key and match on it', () => {
+            const path1 = YAJSPath.parse('$.__proto__.prop3');
+
+            const descendant1 = YAJSPath.parse('$..[__proto__]prop3');
+            const descendant2 = YAJSPath.parse('$..[prop5]prop3');
+
+            expect(descendant1.match(path1)).to.equal(true);
+            expect(descendant2.match(path1)).to.equal(false);
+        });
+    });
+
 });

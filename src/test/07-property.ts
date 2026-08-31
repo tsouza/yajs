@@ -38,15 +38,16 @@ const jsonPrimitive = fc.oneof(
     fc.string(),
 );
 
-// Object *keys* additionally exclude every name Object.prototype itself
-// carries (constructor, toString, valueOf, hasOwnProperty, __proto__, ...)
-// - see the comments below rootSafeValueArbitrary for the two distinct
-// bugs this works around. Values are unrestricted (jsonPrimitive above,
-// used for both keys' string type and values' string type, has no such
-// exclusion - only where a string is used as an object *key* does this
-// class of name cause trouble).
-const RESERVED_OBJECT_PROTOTYPE_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype));
-const jsonKeyArbitrary = fc.string().filter((key) => !RESERVED_OBJECT_PROTOTYPE_KEYS.has(key));
+// Object *keys* are unrestricted fc.string() - including names
+// Object.prototype itself carries (constructor, toString, valueOf,
+// hasOwnProperty, __proto__, ...). Those names used to be excluded here to
+// work around two bugs in AbstractObjectBuilder.ts (see the dedicated
+// regression tests below, which cover the fix for GitHub issue #12) where a
+// plain `{}` was used as an unguarded hash map for both the object being
+// assembled and the drop-keys lookup table; both now use
+// `Object.create(null)` / `Object.defineProperty` so no such exclusion is
+// needed any more.
+const jsonKeyArbitrary = fc.string();
 
 const jsonValueArbitrary = fc.letrec<{ value: unknown }>((tie) => ({
     value: fc.oneof(
@@ -91,42 +92,18 @@ const jsonValueArbitrary = fc.letrec<{ value: unknown }>((tie) => ({
 // TDQSTR2 instead of START, and reports a bogus truncation error on
 // perfectly valid, complete JSON. See the dedicated regression test below.
 //
-// Two more, unrelated bugs rule out any Object.prototype property name
-// (constructor, toString, valueOf, hasOwnProperty, __proto__, ...) as an
-// object key anywhere in the generated tree (see jsonKeyArbitrary above) -
-// both are instances of the same root mistake (treating a plain `{}` as a
-// hash map without guarding against its inherited properties), just in two
-// different places:
-//
-// 1. `{"__proto__":{"a":1}}` specifically: yajs's object builder
-//    (AbstractObjectBuilder's ObjectNode.handle, in
-//    src/main/lib/dispatcher/AbstractObjectBuilder.ts) assembles each
-//    object with a plain `this.value[key] = value` assignment. For the key
-//    "__proto__" that doesn't create a data property - it invokes the
-//    inherited Object.prototype accessor, which sets the object's own
-//    [[Prototype]] instead - so `{"__proto__":{"a":1}}` silently
-//    reconstructs as `{}`, not `{ __proto__: { a: 1 } }`. Native
-//    JSON.parse doesn't have this problem because (since ES2015) it
-//    defines object properties with CreateDataProperty/defineProperty
-//    semantics instead of a plain `[[Set]]`.
-//
-// 2. Any of the other names, e.g. `{"valueOf":false}`: unrelated to
-//    "__proto__" and to selector projection entirely - it reproduces with
-//    plain "$", no `<...>` drop-keys syntax in the path at all. In
-//    AbstractObjectBuilder.startObjectEntry, `dropKeys` (empty here) is
-//    turned into a lookup table with
-//    `(dropKeys || []).reduce((obj, val) => { obj[val] = true; return obj; }, {})`,
-//    and membership is then tested with the plain truthiness of
-//    `this.mDropKeys[key]`. For key "valueOf" that expression evaluates to
-//    the *inherited* `Object.prototype.valueOf` function reference (a
-//    truthy value) rather than `undefined`, even though "valueOf" was
-//    never actually listed as a key to drop - so the object builder
-//    concludes it should drop this entry, and `{"valueOf":false}` silently
-//    reconstructs as `{}`. The fix in both spots is the same:  build the
-//    lookup table with `Object.create(null)` (or check via
-//    `Object.prototype.hasOwnProperty.call(...)`) instead of a plain `{}`.
-//
-// See the dedicated regression tests below for both.
+// GitHub issue #12 (fixed): object keys colliding with an Object.prototype
+// property name (constructor, toString, valueOf, hasOwnProperty,
+// __proto__, ...) used to be silently dropped or, for `__proto__`
+// specifically, misinterpreted as reassigning the built object's actual
+// prototype - both were instances of the same root mistake (treating a
+// plain `{}` as a hash map without guarding against its inherited
+// properties) in AbstractObjectBuilder.ts's ObjectNode.handle and dropKeys
+// lookup table. Both now use `Object.create(null)` / `Object.defineProperty`
+// instead of a plain `{}` and bare `[key] =` assignment, so
+// jsonKeyArbitrary above no longer needs to exclude these names - the
+// property below exercises them like any other key. See the dedicated
+// regression tests further down for the specific, previously-broken cases.
 const rootSafeValueArbitrary = fc.oneof(
     jsonPrimitive,
     fc.dictionary(jsonKeyArbitrary, jsonValueArbitrary, { maxKeys: 8 }),
@@ -205,31 +182,31 @@ describe('yajs property-based round-trip', () => {
         expect(actual).to.deep.equal([{ path: [], value: '' }]);
     });
 
-    // Tracked regression for the bug described above rootSafeValueArbitrary:
-    // an object key literally named "__proto__" doesn't become a data
-    // property, unlike native JSON.parse. Same `it.fails` contract as the
-    // two regressions above; if this starts failing ("unexpectedly
-    // passed"), drop jsonKeyArbitrary's `!== '__proto__'` filter, promote
-    // this to a normal `it`, and assert the success case instead.
-    it.fails('known bug: an object key named "__proto__" is not reconstructed as an own property', async () => {
+    // Fixed regression for GitHub issue #12: an object key literally named
+    // "__proto__" must become a real own data property, like native
+    // JSON.parse, rather than reassigning the built object's actual
+    // prototype. Also confirms the fix doesn't just move where the value is
+    // dropped - the object's real [[Prototype]] must still be
+    // Object.prototype after parsing.
+    it('reconstructs an object key named "__proto__" as an own data property, without touching the real prototype chain', async () => {
         // Written as a JSON string literal, not built via a `{ __proto__: ... }`
         // object literal - the latter is special-cased by JS itself to set the
         // new object's prototype rather than create an own property, which
         // would test the JS language's footgun instead of yajs's.
         const json = '{"__proto__":{"polluted":true}}';
         const actual = await runYajs(Buffer.from(json));
-        expect(actual[0].value).to.deep.equal(JSON.parse(json));
+        const value = actual[0].value;
+        expect(value).to.deep.equal(JSON.parse(json));
+        expect(Object.getPrototypeOf(value)).to.equal(Object.prototype);
+        expect(Object.prototype.hasOwnProperty.call(value, '__proto__')).to.be.true;
     });
 
-    // Tracked regression for bug 2 described above rootSafeValueArbitrary:
-    // an object key that happens to share a name with an inherited
-    // Object.prototype property (valueOf, toString, constructor,
-    // hasOwnProperty, ...) is silently dropped, with no drop-keys `<...>`
-    // syntax involved anywhere in the selector. Same `it.fails` contract as
-    // the regressions above; if this starts failing ("unexpectedly
-    // passed"), drop jsonKeyArbitrary's reserved-name filter, promote this
-    // to a normal `it`, and assert the success case instead.
-    it.fails('known bug: an object key that collides with an Object.prototype property name is silently dropped', async () => {
+    // Fixed regression for GitHub issue #12: an object key that happens to
+    // share a name with an inherited Object.prototype property (valueOf,
+    // toString, constructor, hasOwnProperty, ...) must not be silently
+    // dropped, even with no drop-keys `<...>` syntax involved anywhere in
+    // the selector.
+    it('reconstructs an object key that collides with an Object.prototype property name', async () => {
         const json = '{"valueOf":false}';
         const actual = await runYajs(Buffer.from(json));
         expect(actual[0].value).to.deep.equal(JSON.parse(json));

@@ -27,8 +27,13 @@ JSONTestSuite is released under the MIT License:
 > ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 > OTHER DEALINGS IN THE SOFTWARE.
 
-One upstream fixture, `n_structure_100000_opening_arrays.json` (100,000
-unclosed `[` characters), is intentionally **not** included here: piping it
-through yajs reliably exhausts the Node heap (see the "known conformance
-gaps" comments in `06-conformance.ts`), so a copy that can take down the
-whole test run has no place in a fixture directory a loop iterates over.
+`n_structure_100000_opening_arrays.json` (100,000 unclosed `[` characters)
+used to be intentionally excluded from this directory: piping it through
+yajs reliably exhausted the Node heap, so a copy that could take down the
+whole test run had no place in a fixture directory a loop iterates over.
+Fixed (GitHub issue #8) - StreamContext's dispatcher bookkeeping no longer
+accumulates and re-dispatches to one entry per nesting level, so this
+fixture now completes in well under a second using well under 100MB, even
+under a constrained heap. The file is regenerated here (100,000 literal `[`
+bytes, matching the upstream fixture's content) rather than fetched, since
+it is entirely mechanical to reproduce.
