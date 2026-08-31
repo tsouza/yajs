@@ -6,9 +6,11 @@ This is a benchmark comparing yajs with other json streaming js libraries:
 [stream-json](https://www.npmjs.com/package/stream-json) available as a
 fourth comparison in the current harness (see the update note below).
 
-The numbers in the [Results](#results) section are the **historical April
-2018 run** of yajs 1.3.0, executed under the software/hardware configuration
-listed below. They have not been re-run since.
+Most of the numbers in the [Results](#results) section are the **historical
+April 2018 run** of yajs 1.3.0, executed under the software/hardware
+configuration listed below and not re-run since. The exception is Dataset 1,
+which also has a fresh 2026 run against all four libraries - see
+[Dataset 1 (2026)](#dataset-1-2026).
 
 *Update (2026)*: the bench suite's toolchain (which had bit-rotted after
 `ts-node` was removed) was restored to working order, running the
@@ -18,9 +20,11 @@ was added as a fourth *available* comparison alongside the original
 oboe.js/JSONStream pair: oboe.js has seen no meaningful release since ~2016
 and JSONStream is maintained but old-style, while stream-json is the
 actively-maintained, widely-used modern standard for this class of tool
-today. The modernized harness has not (yet) produced a fresh results table -
-the tables below therefore still show only the original three libraries. To
-get current numbers for all four on your own machine, run `npm run bench`.
+today. A fresh Dataset 1 run with all four libraries (2026 environment) is
+included below as [Dataset 1 (2026)](#dataset-1-2026); Datasets 2-4 remain
+the original 2018 numbers only, since their source files are multi-gigabyte
+and re-running them is impractical to do routinely. To get current numbers
+for all four on your own machine, run `npm run bench`.
 
 ## Method
 
@@ -86,13 +90,33 @@ the same dataset (`library EPS ÷ yajs EPS × 100`, computed from the Avg EPS
 column). Lower means slower relative to yajs; yajs itself is the 100%
 baseline (shown as `-`).
 
-### Dataset 1
+### Dataset 1 (2018, original three libraries)
 
 Library    | Completed |   Time   | Avg EPS | EPS vs yajs
 -----------|:---------:|:--------:|--------:|:-------:
 yajs       | Yes       | 16.627 s | 126.50K | -
 JSONStream | Yes       | 26.377 s | 78.21K  | 61.83%
 oboe.js    | Yes       | 46.965 s | 43.34K  | 34.26%
+
+### Dataset 1 (2026)
+
+Freshly run against all four libraries via the current tsx-based harness
+(`npm run bench`), Node v24.13.0, Linux x86_64, on a shared/loaded machine
+(reference only - not a clean-room measurement; re-run locally for a
+number you can rely on). EPS = final currentRate reported by
+[measured](https://github.com/felixge/node-measured) at completion of all
+2,000,000 objects in Dataset 1.
+
+Library     | Avg EPS | EPS vs yajs
+------------|--------:|:-------:
+yajs        | 219.91K | -
+JSONStream  | 363.47K | 165.28%
+oboe.js     | 124.76K | 56.73%
+stream-json | 14.63K  | 6.65%
+
+Directionally consistent with the 2018 run (JSONStream competitive-to-faster,
+oboe.js slower, both relative orderings unchanged); stream-json is
+substantially slower than all three on this selector/dataset shape.
 
 ### Dataset 2
 
