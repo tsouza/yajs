@@ -131,7 +131,30 @@ export class YAJSPath {
                 if (pointer2 >= 0 && jsonPath.stack[pointer2].getType() === PathOperator.Type.ARRAY) {
                     return false;
                 }
-                pointer1++;
+                // Retrying the SAME pattern operator (o1) against whatever
+                // lies beneath the array is how Root and ChildNode reach
+                // their real, still-pending comparison: Root.match() is
+                // deliberately strict (see the comment above) so it must
+                // retry to find the genuine Root beneath; ChildNode.match()
+                // treats an immediate Array as a provisional pass (see
+                // ChildNode.matches()) pending the real key check beneath.
+                // Wildcard is different: its match() is UNCONDITIONALLY
+                // true (issue #20) - matching this array already IS its
+                // final, fully-resolved verdict, with no more specific
+                // check deferred to beneath it. Retrying it anyway would
+                // let that unconditional "true" also silently swallow
+                // whatever position level sits just beneath the array -
+                // most critically the document's own Root, which the
+                // pattern's OWN trailing Root operator still separately
+                // needs to pair against (that pairing is what a bare '$'
+                // relies on to close out the match one iteration later) -
+                // e.g. for '$.*' against a bare top-level array ([1,2,3]),
+                // retrying Wildcard would have it also "match" Root,
+                // leaving pattern's Root with nothing left in the position
+                // stack to pair against and the whole match falsely failing.
+                if (o1Type !== PathOperator.Type.WILDCARD) {
+                    pointer1++;
+                }
             } else if (!o1.match(o2)) {
                 return false;
             }
