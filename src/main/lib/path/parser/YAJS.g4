@@ -5,7 +5,7 @@ grammar YAJS;
 }
 
 path
-  : ROOT pathStep* (pathLeaf EOF)?
+  : ROOT pathStep* pathLeaf? EOF
   ;
 
 pathStep
