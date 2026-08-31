@@ -17,7 +17,17 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
         this.dispatch = this.filterHelper.isFiltered() ?
             () => {
                 const result: any = this.peek().value;
-                if (this.filterHelper.filters((key) => key in result)) {
+                // Must be an own-property check, not `key in result`: built
+                // result objects deliberately keep Object.prototype (issue
+                // #12's fix stores colliding keys like "__proto__" as real
+                // own data properties instead of stripping the prototype),
+                // so `in` - which walks the prototype chain - would report
+                // every inherited member name (toString, constructor,
+                // valueOf, hasOwnProperty, __proto__, ...) as present and
+                // make projections like $.a{toString} match objects that
+                // don't actually carry that key.
+                if (this.filterHelper.filters((key) =>
+                        Object.prototype.hasOwnProperty.call(result, key))) {
                     this.listener(result);
                 }
             } : () => this.listener(this.peek().value);
