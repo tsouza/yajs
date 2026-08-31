@@ -142,6 +142,22 @@ function createSaxParser(context: StreamContext, stream: ThroughStream,
             flushPendingString();
             strValue = str;
         },
+        // See the extensive comment on onValueBoundary in JsonSaxParser.ts:
+        // this is the whitespace-confirmed NDJSON record boundary - the one
+        // disambiguation point besides onComma/onEndArray/onEndObject/onString
+        // that a still-buffered strValue needs to be flushed at (issue #56).
+        // Without this, a bare top-level string immediately followed - across
+        // just a newline, no comma - by a differently-typed next record (a
+        // number/bool/null/array/object, or one that itself goes on to error)
+        // either silently discarded the buffered string (those callbacks all
+        // reset strValue = null without flushing first) or, once the next
+        // record's own error set state.errored, made it permanently
+        // unflushable by flushPendingString()'s own guard - even though that
+        // guard's job is to protect a string that belongs to the record
+        // that's actually failing, not one already confirmed complete before
+        // it. Firing the flush right here, before any byte of the next
+        // record is even parsed, sidesteps both failure modes.
+        onValueBoundary: () => flushPendingString(),
     } as JsonSaxParser.ICallbacks);
 
     parser.flushPendingString = flushPendingString;
