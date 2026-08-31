@@ -330,6 +330,143 @@ describe('path match', () => {
         });
     });
 
+    // Regression tests for GitHub issue #39: YAJSPath.match()'s DESCENDANT
+    // branch resumes matching from the nearest position level satisfying
+    // `prevScan` (the pattern operator immediately preceding '..'). That's
+    // fine when prevScan is selective (a real key, or Root), but Wildcard/
+    // Descendant.match() are both unconditionally true, so the "nearest"
+    // candidate is *always* the very next position level - silently
+    // capping '..' at exactly one hop whenever it's immediately preceded by
+    // a bare wildcard (or another descendant), instead of reaching
+    // arbitrary depth like every other '..' composition. Fixed by
+    // collapsing through every non-selective (WILDCARD/DESCENDANT) operator
+    // first and scanning for the next genuinely selective one instead -
+    // which is always found, since pattern[0] is always Root.
+    describe('descendant reaches arbitrary depth past a bare wildcard (issue #39)', () => {
+
+        it('does not stop one hop short past "$.*.." (own repro: $.*..* vs {"a":{"x":1,"b":{"c":2}}}\'s "c")', () => {
+            const pattern = YAJSPath.parse('$.*..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('b').
+                addChild('c').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('matches the same position via the equivalent named-key form $.a..* (control, must already pass)', () => {
+            const pattern = YAJSPath.parse('$.a..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('b').
+                addChild('c').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('matches the same position via the equivalent double-descendant form $..*..* (control, must already pass)', () => {
+            const pattern = YAJSPath.parse('$..*..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('b').
+                addChild('c').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still matches exactly one hop past the wildcard when that\'s all there is (must not regress)', () => {
+            const pattern = YAJSPath.parse('$.*..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('x').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('collapses a run of wildcards before a descendant the same way (adversarial: $.*.*..* reaching two hops past)', () => {
+            const pattern = YAJSPath.parse('$.*.*..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('b').
+                addChild('c').
+                addChild('d').
+                build();
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still fails to match when the position is genuinely too shallow (must not regress into over-matching)', () => {
+            const pattern = YAJSPath.parse('$.*..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                build();
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+    });
+
+    // Regression tests for GitHub issue #38's "dropped match" variant (see
+    // 03-yajs.ts for the full corruption-vs-drop root-cause writeup): the
+    // "a matched array only consumes ONE pattern operator, so a SECOND
+    // consecutive array must not also be skipped transparently" check in
+    // YAJSPath.match() rejected unconditionally, even when the pattern
+    // operator responsible for that array is a Wildcard immediately
+    // preceded (in the pattern) by another Wildcard or a Descendant - which
+    // are specifically designed to tolerate exactly that unbounded
+    // intervening depth (see the wildcard-into-array-overshoot branch just
+    // below it, which already carves out the identical exception for the
+    // opposite position shape). Fixed by exempting that same composition
+    // here too.
+    describe('descendant/wildcard tolerates consecutive arrays (issue #38 dropped-match variant)', () => {
+
+        it('reaches an object nested two array levels deep via $..* (own repro: {"m":[[{"a":1}]]})', () => {
+            const pattern = YAJSPath.parse('$..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('m').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('a'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+
+        it('still does NOT let a bare (non-descendant) $.* reach two array levels deep (must not regress issue #28\'s array-of-arrays behavior)', () => {
+            const pattern = YAJSPath.parse('$.*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(false);
+        });
+
+        it('reaches three array levels deep via $..* (adversarial, deeper than the own repro)', () => {
+            const pattern = YAJSPath.parse('$..*');
+
+            const position = new YAJSPath.Builder().
+                addChild('m').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+            position.push(new ChildNode('a'));
+
+            expect(pattern.match(position)).to.equal(true);
+        });
+    });
+
     describe('string', () => {
         it('should match on root', () => {
             const root1 = YAJSPath.parse('$');
