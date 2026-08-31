@@ -164,6 +164,62 @@ describe('path parser', () => {
                 /has no left-hand operand/);
         });
     });
+
+    // Regression tests for GitHub issue #35: extractKeys()/buildArgsExpression()
+    // (and their internal doExtractKeys()/doExtractKeysFromExpression()/
+    // renderExpression()/renderTerm() helpers) walked the filterExpression/
+    // filterExpressionTerm tree via plain JS recursion - one call frame per
+    // level of paren nesting - which overflowed the JS call stack (uncaught
+    // RangeError) at a nesting depth of roughly 2,000 on this machine, LOWER
+    // than the depth the ANTLR-generated parser itself can already build a
+    // tree for (roughly 4,000-5,000 on this machine) - making this walk the
+    // crash's actual weakest link. Both walks now use an explicit stack
+    // instead of the JS call stack (see utils.ts), so nesting depth is no
+    // longer bounded by it.
+    describe('deeply nested parenthesized groups (issue #35)', () => {
+
+        it('correctly extracts keys and builds an expression through a few hundred levels of redundant nesting', () => {
+            const depth = 300;
+            const parser = createParser(`$.[${'('.repeat(depth)}key1${')'.repeat(depth)}]x`);
+            const filter = parser.path().pathStep()[0].actionFilter();
+
+            expect(extractKeys(filter.filterExpression())).to.deep.equal(['key1']);
+            // A chain of single-term parenthesized groups is semantically
+            // transparent (see utils.ts's COMBINE_TRANSPARENT_GROUP) - no
+            // real parens are needed in the compiled expression no matter
+            // how many redundant levels of grouping the selector wrote,
+            // since a lone term never needs disambiguating from a
+            // surrounding operator. This also keeps the later
+            // `new vm.Script(...)` compile step (in ScriptFilterHelper) from
+            // having to parse real nested parens matching the selector's
+            // nesting depth - V8's own JS-source parser is separately
+            // recursive and was found to overflow at a similarly low depth,
+            // so eliminating our own walk's recursion alone was not
+            // sufficient to fix issue #35's reported crash end-to-end.
+            expect(buildArgsExpression(filter.filterExpression())).to.equal('args["key1"]');
+        });
+
+        it('does not overflow the call stack far past the pre-fix ~2,000-level ceiling', () => {
+            // 2,000 is past the pre-fix ~2,000-level ceiling of this walk
+            // specifically (measured on the main thread; under a
+            // worker-thread test runner like this one, V8's default stack is
+            // considerably smaller, so both that pre-fix ceiling and the
+            // ANTLR-generated parser's own separate, third-party nesting
+            // ceiling for just building a parse tree - confirmed empirically
+            // to sit at ~3,000 in this test runner, versus ~4,000-5,000 on
+            // the main thread - sit lower here too). This depth keeps
+            // comfortable margin below that other, out-of-scope ceiling
+            // while still isolating and exercising only the walk this issue
+            // is actually about.
+            const depth = 2000;
+            const parser = createParser(`$.[${'('.repeat(depth)}key1${')'.repeat(depth)}]x`);
+            const filter = parser.path().pathStep()[0].actionFilter();
+
+            expect(() => extractKeys(filter.filterExpression())).to.not.throw();
+            expect(extractKeys(filter.filterExpression())).to.deep.equal(['key1']);
+            expect(buildArgsExpression(filter.filterExpression())).to.equal('args["key1"]');
+        });
+    });
 });
 
 function createParser(path: string): YAJSParser {

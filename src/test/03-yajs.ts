@@ -344,6 +344,50 @@ describe('yajs', () => {
         });
     });
 
+    // Regression tests for GitHub issue #35: a deeply parenthesized filter
+    // expression used to overflow the JS call stack (uncaught RangeError)
+    // straight out of the synchronous yajs() call, at a nesting depth of
+    // roughly 2,000 - inconsistent with the "malformed/pathological
+    // selectors fail cleanly" principle established by issues #18/#19/#23.
+    // The fix (see parser/utils.ts) makes the recursive tree-walk added for
+    // issue #26 iterative (an explicit stack instead of the JS call stack),
+    // and additionally avoids emitting real nested parens in the compiled
+    // JS for redundant single-term groups, since V8's own JS-source parser
+    // (used by the `new vm.Script(...)` compile step in ScriptFilterHelper)
+    // is separately recursive and was found to overflow at a similarly low
+    // depth on real nested parens - so fixing only this codebase's own walk
+    // was not sufficient on its own to fix the crash end-to-end.
+    describe('deeply nested parenthesized filter expressions (issue #35)', () => {
+
+        const data = { a: { x: 'v1' }, c: { x: 'v2' }, b: { x: 'v3' } };
+
+        it('filters correctly through a few hundred levels of redundant parenthesized nesting around a single key', () =>
+            Promise.all([
+                testJson(JSON.stringify(data), `$..[${'('.repeat(300)}a${')'.repeat(300)}]x`),
+                testJson(JSON.stringify(data), '$..[a]x'),
+            ]).then(([nested, plain]) => {
+                expect(nested.map((e) => e.value)).to.deep.equal(['v1']);
+                expect(nested.map((e) => e.value)).to.deep.equal(plain.map((e) => e.value));
+            }));
+
+        it('does not throw a RangeError and still filters correctly at the depth from the issue\'s own repro (2,500 levels)', () =>
+            // 2,500 stays with comfortable margin below the ANTLR-generated
+            // parser's own separate, third-party nesting ceiling for simply
+            // building a parse tree (confirmed empirically to be ~3,000
+            // under a worker-thread test runner like this one, and
+            // ~4,000-5,000 on the main thread - see 01-parser.ts's issue #35
+            // tests), so this stays a reliable regression test for this
+            // codebase's own fix rather than depending on exactly where that
+            // other, out-of-scope ceiling happens to sit.
+            Promise.all([
+                testJson(JSON.stringify(data), `$..[${'('.repeat(2500)}a${')'.repeat(2500)}]x`),
+                testJson(JSON.stringify(data), '$..[a]x'),
+            ]).then(([nested, plain]) => {
+                expect(nested.map((e) => e.value)).to.deep.equal(['v1']);
+                expect(nested.map((e) => e.value)).to.deep.equal(plain.map((e) => e.value));
+            }));
+    });
+
     // Regression tests for GitHub issues #14 and #15: a matched array's
     // immediate elements must each be streamed as one whole value, the same
     // way an object element already was (see 'should access in nested array
