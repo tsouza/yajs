@@ -84,8 +84,8 @@ export class YAJSPath {
     }
 
     match(jsonPath: YAJSPath): boolean {
-        let pointer1 = this.size - 1;
-        let pointer2 = jsonPath.size - 1;
+        const pointer1 = this.size - 1;
+        const pointer2 = jsonPath.size - 1;
 
         const lastPattern = this.stack[pointer1];
         const lastPosition = jsonPath.stack[pointer2];
@@ -106,6 +106,15 @@ export class YAJSPath {
             return false;
         }
 
+        return this.matchFrom(jsonPath, pointer1, pointer2);
+    }
+
+    // The bulk of match()'s own former loop body, factored out so the
+    // DESCENDANT branch below (issue #45) can recurse into it: verifying
+    // the pattern operators still remaining (above pointer1) against the
+    // position stack still remaining (above pointer2). match() itself just
+    // seeds the initial pointers after its own leading last-operator check.
+    private matchFrom(jsonPath: YAJSPath, pointer1: number, pointer2: number): boolean {
         while (pointer1 >= 0) {
             if (pointer2 < 0) {
                 return false;
@@ -193,20 +202,46 @@ export class YAJSPath {
                 // (the base implementation here - a plain linear scan - stays
                 // the fallback for any non-streaming YAJSPath position, e.g.
                 // one built directly via Builder in tests).
-                const foundIndex = jsonPath.nearestAncestorIndex(prevScan, pointer2 + 1 - mandatoryHops);
-                if (foundIndex < 0) {
-                    // Unlike a ChildNode/Root prevScan that's simply never
-                    // found (already handled correctly by the outer loop's
-                    // own pointer2 < 0 checks - see below), a collapsed
-                    // WILDCARD's still-outstanding mandatoryHops can push
-                    // the search ceiling itself negative even when prevScan
-                    // (Root) is trivially "found" at every other position -
-                    // failing fast here, rather than falling through to
-                    // pointer2's own sign, keeps that unrelated success case
-                    // from masking this one.
-                    return false;
+                //
+                // Issue #45: the NEAREST ancestor satisfying prevScan isn't
+                // necessarily the right one - the pattern operators still
+                // remaining ABOVE prevScan (e.g. the Root that must sit
+                // directly above a top-level key preceding '..') still have
+                // to match whatever lies above whichever candidate is
+                // chosen here, and the nearest candidate can fail that while
+                // a farther one succeeds (repro: '$.a..x' against
+                // {"a":{"c":{"a":{"x":1}}}} - "x"'s nearest "a" ancestor is
+                // the INNER one, but nothing of the pattern's is left to
+                // match against what's above THAT "a" except Root, and
+                // Root only actually sits above the OUTER "a"). So this
+                // can't just commit to the nearest candidate and let the
+                // loop continue on regardless (a false negative - a real,
+                // in-document match silently missed) - each candidate,
+                // nearest first, has to be tried by recursively verifying
+                // the remaining pattern against it, backtracking to the
+                // next-farthest candidate on failure, until one works or
+                // none are left.
+                let searchCeiling = pointer2 + 1 - mandatoryHops;
+                for (;;) {
+                    const foundIndex = jsonPath.nearestAncestorIndex(prevScan, searchCeiling);
+                    if (foundIndex < 0) {
+                        // Unlike a ChildNode/Root prevScan that's simply never
+                        // found (already handled correctly by the outer loop's
+                        // own pointer2 < 0 checks - see below), a collapsed
+                        // WILDCARD's still-outstanding mandatoryHops can push
+                        // the search ceiling itself negative even when prevScan
+                        // (Root) is trivially "found" at every other position -
+                        // failing fast here, rather than falling through to
+                        // pointer2's own sign, keeps that unrelated success case
+                        // from masking this one. Exhausting every candidate
+                        // during backtracking lands here too.
+                        return false;
+                    }
+                    if (this.matchFrom(jsonPath, pointer1, foundIndex - 1)) {
+                        return true;
+                    }
+                    searchCeiling = foundIndex - 1;
                 }
-                pointer2 = foundIndex - 1;
             } else if (o2.getType() === PathOperator.Type.ARRAY) {
                 // A matched array is transparent for its parent key/root, so
                 // this array level doesn't consume a pattern operator - but
