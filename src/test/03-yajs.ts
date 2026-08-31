@@ -124,6 +124,48 @@ describe('yajs', () => {
                     value: 1 });
                 }));
 
+    // Regression test found while verifying the issue #14 nested-array fix:
+    // stepIntoObject() increments the parent array's running index before
+    // descending into a new object element, but stepIntoArray() didn't do
+    // the same before descending into a new element that turns out to be
+    // an array itself - harmless before #14 (a nested array was always
+    // flattened straight through to its own scalar elements, whose own
+    // onValue() correctly increments the index), but once a nested array
+    // became a matched value in its own right, its own position in the
+    // parent array stayed stuck at ArrayIndex's uninitialized -1 default.
+    it('should track the correct array index for a matched nested array, ' +
+        'not the uninitialized default', () =>
+        testJson('[[1,2],[3,4]]', '$', true).then((array) => {
+            expect(array).to.be.lengthOf(2);
+            expect(array[0]).to.be.deep.equal({ path: [ 0 ], value: [ 1, 2 ] });
+            expect(array[1]).to.be.deep.equal({ path: [ 1 ], value: [ 3, 4 ] });
+        }));
+
+    // Found via adversarial review of the fix above: StreamContext.onValue()
+    // had the identical missing-increaseArrayIndex() bug for a SCALAR
+    // sibling (not just an array-typed one) sitting directly in an
+    // already-open array's elements slot - and left uncorrected, a single
+    // scalar sibling didn't just report its own index as -1, it silently
+    // desynced the index reported for every later sibling too, since the
+    // increment the position was relying on it to provide never happened.
+    it('should track the correct array index for scalar array elements, ' +
+        'and not desync the index for later siblings', () =>
+        testJson('[1,2,3]', '$', true).then((array) => {
+            expect(array).to.be.lengthOf(3);
+            expect(array[0]).to.be.deep.equal({ path: [ 0 ], value: 1 });
+            expect(array[1]).to.be.deep.equal({ path: [ 1 ], value: 2 });
+            expect(array[2]).to.be.deep.equal({ path: [ 2 ], value: 3 });
+        }));
+
+    it('should not let a scalar sibling desync the index of a later ' +
+        'array-typed sibling', () =>
+        testJson('[1,[9,8],3]', '$', true).then((array) => {
+            expect(array).to.be.lengthOf(3);
+            expect(array[0]).to.be.deep.equal({ path: [ 0 ], value: 1 });
+            expect(array[1]).to.be.deep.equal({ path: [ 1 ], value: [ 9, 8 ] });
+            expect(array[2]).to.be.deep.equal({ path: [ 2 ], value: 3 });
+        }));
+
     // Regression tests for GitHub issue #12: an object key that collides
     // with either the special `__proto__` accessor or an inherited
     // Object.prototype method name used to be silently dropped (or, for
@@ -212,6 +254,103 @@ describe('yajs', () => {
                     expect(array).to.be.lengthOf(1);
                     expect(array[0].value).to.equal('value1');
                 }));
+    });
+
+    // Regression test for GitHub issue #17: a filter key containing an
+    // apostrophe used to be interpolated unescaped into a JS string literal
+    // in generated code compiled via vm.runInContext (`args['${key}']`), so
+    // it broke out of the string and crashed with a raw SyntaxError instead
+    // of being treated as an ordinary key name. Fixed via JSON.stringify in
+    // utils.ts's doBuildArgsExpression().
+    describe('selector syntax targeting a key containing an apostrophe (issue #17)', () => {
+
+        it('filters a descendant match on an ancestor key containing an ' +
+            'apostrophe via the [...] selector, without throwing', () =>
+            testJson('{"key\'s":{"target":"value1"},"safe":{"target":"value2"}}',
+                "$..[key's]target").
+                then((array) => {
+                    expect(array).to.be.lengthOf(1);
+                    expect(array[0].value).to.equal('value1');
+                }));
+    });
+
+    // Regression tests for GitHub issues #14 and #15: a matched array's
+    // immediate elements must each be streamed as one whole value, the same
+    // way an object element already was (see 'should access in nested array
+    // 1' above, matching object5's array-of-objects) - including an element
+    // that is itself an array, which used to be recursively flattened all
+    // the way down to its leaf scalars instead of being captured whole
+    // (StreamPosition's hasOnlyArrayIndex treated every array-open as a
+    // fresh top-level candidate, and ObjectDispatcher.endArray() never
+    // dispatched even when it was captured). See StreamPosition.ts,
+    // StreamContext.ts (startArray/startObject/onValue) and
+    // ObjectDispatcher.ts (endArray) for the fix.
+    describe('nested array streaming (issues #14, #15)', () => {
+
+        it('streams a nested array\'s immediate elements as whole arrays, not recursively flattened scalars (issue #14\'s own repro)', () =>
+            testJson('[[1,2],[3,4]]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[1, 2], [3, 4]]);
+            }));
+
+        it('still streams a flat array of scalars one scalar at a time (must not regress)', () =>
+            testJson('[1,2,3]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
+            }));
+
+        it('still streams a flat array of objects one whole object at a time (must not regress)', () =>
+            testJson('[{"a":1},{"a":2}]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([{ a: 1 }, { a: 2 }]);
+            }));
+
+        it('streams a nested array reached via a named key path, not just bare $ (nested inside an object)', () =>
+            testJson('{"a":[[1,2],[3,4]]}', '$.a').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[1, 2], [3, 4]]);
+            }));
+
+        it('captures an array nested arbitrarily deep inside a matched element as one whole value (only the outermost level streams)', () =>
+            testJson('[[[1,2]],[3,[4,5]]]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[[1, 2]], [3, [4, 5]]]);
+            }));
+
+        it('captures an empty nested array as [], not zero emissions', () =>
+            testJson('[[],[1],[]]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[], [1], []]);
+            }));
+
+        it('handles a heterogeneous array (scalar, array, object, scalar) - each element whole, regardless of type', () =>
+            testJson('[1,[2,3],{"x":4},5]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, [2, 3], { x: 4 }, 5]);
+            }));
+
+        // An object sibling between two array siblings of the same matched
+        // array used to lose track of the fact it was still inside that
+        // array at all: startObject()/onValue() unconditionally replaced
+        // the whole StreamPosition on every isInRoot()-triggered match,
+        // discarding the outer array's own tracking, so the array sibling
+        // AFTER the object looked like a brand new top-level candidate and
+        // got flattened instead of captured whole. Fixed by only ever
+        // replacing position at a genuine document/NDJSON boundary
+        // (position undefined, or back at bare root) - see startObject()'s
+        // and onValue()'s isInRoot() checks in StreamContext.ts.
+        it('captures an array sibling that comes after an object sibling in the same matched array (position must not be lost across a heterogeneous sibling)', () =>
+            testJson('[[1,2],{"a":9},[3,4]]', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[1, 2], { a: 9 }, [3, 4]]);
+            }));
+
+        it('still captures each object element of a matched array whole via a named key path (must not regress $.object4.object5-style matching)', () =>
+            testJson('{"a":{"object5":[{"x":1},{"x":2}]}}', '$.a.object5').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([{ x: 1 }, { x: 2 }]);
+            }));
+
+        it('still resets between NDJSON documents, even when each is itself a nested array', () =>
+            testJson('[[1,2],[3,4]]\n[[5,6],[7,8]]\n', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([[1, 2], [3, 4], [5, 6], [7, 8]]);
+            }));
+
+        it('still matches "..." descendant paths reaching into an array, unaffected by the array-transparency fix (regression guard)', () =>
+            testJson('{"deep":{"nested":{"array":[1,{"path1":1},3]}}}', '$..path1').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1]);
+            }));
     });
 });
 

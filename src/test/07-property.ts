@@ -58,20 +58,28 @@ const jsonValueArbitrary = fc.letrec<{ value: unknown }>((tie) => ({
     ),
 })).value;
 
-// yajs streams the elements of a matched *array* one at a time rather than
-// buffering and emitting the whole array as a single value (confirmed both
-// by manual probing here and by the existing '$.object4.object5' test in
-// 03-yajs.ts, which asserts one emission per array element, not one
-// emission of the array). That is presumably intentional - it is the whole
-// point of a streaming parser that a huge top-level array need not be
-// buffered in memory - but it means "$" does not reconstruct a document
-// whose root value is itself a bare array (and, consistently with the
-// element-streaming behavior, an empty root array yields zero emissions
-// rather than one emission of `[]`). Arrays nested inside an object or
-// another array are unaffected - they are only ever collected as part of
-// an ancestor's value, never dispatched as a match in their own right -
-// so this generator only needs to keep a bare array from being the
-// document's outermost shape.
+// yajs streams the *immediate elements* of a matched array one at a time
+// rather than buffering and emitting the whole array as a single value
+// (confirmed both by manual probing here and by the existing
+// '$.object4.object5' test in 03-yajs.ts, which asserts one emission per
+// array element, not one emission of the array). That is presumably
+// intentional - it is the whole point of a streaming parser that a huge
+// top-level array need not be buffered in memory - but it means "$" does
+// not reconstruct a document whose root value is itself a bare array as a
+// *single* emission (and, consistently with the element-streaming behavior,
+// an empty root array yields zero emissions rather than one emission of
+// `[]`). See the dedicated 'root array streaming (issue #14)' property
+// below, which broadens coverage to bare array roots specifically, asserting
+// against their immediate elements rather than a single reconstructed value.
+//
+// Each element is still captured as one *whole* value, whatever it is - a
+// scalar stays a scalar, an object is captured whole, and (since issue #14)
+// an array is ALSO captured whole rather than being recursively flattened
+// into its own leaf scalars. So an array nested inside an object, or nested
+// two or more levels below a matched array, is unaffected by any of this -
+// it is only ever collected as part of an ancestor element's whole value,
+// never itself dispatched as a match - which is why this generator only
+// needs to keep a BARE array from being the document's outermost shape.
 //
 // Separately, a document whose entire content is exactly the two bytes `""`
 // (an empty string, and *nothing* else - no trailing newline, no wrapping
@@ -124,6 +132,29 @@ describe('yajs property-based round-trip', () => {
                 expect(actual).to.have.lengthOf(1);
                 expect(actual[0].path).to.be.empty;
                 expect(actual[0].value).to.deep.equal(expected);
+            }),
+            { numRuns: NUM_RUNS },
+        ));
+
+    // Broadened coverage for issue #14, now that a bare array root no
+    // longer recursively flattens to leaf scalars: unlike
+    // rootSafeValueArbitrary above, a bare array root is exactly what this
+    // property wants to generate, since it is specifically checking the
+    // one-level-streaming behavior "$" applies to a matched array - each
+    // element captured as one whole value (deep-equal to JSON.parse's own
+    // reconstruction of that element, however deeply nested it is
+    // internally) and emitted in order, rather than one emission of the
+    // whole array or a flattened run of leaf scalars.
+    it('streams a root array\'s immediate elements as whole values, in order (issue #14)', () =>
+        fc.assert(
+            fc.asyncProperty(fc.array(jsonValueArbitrary, { maxLength: 8 }), async (value) => {
+                const json = JSON.stringify(value);
+                const expectedElements = JSON.parse(json);
+
+                const actual = await runYajs(Buffer.from(json));
+
+                expect(actual.map((e) => e.value)).to.deep.equal(expectedElements);
+                actual.forEach((e) => expect(e.path).to.be.empty);
             }),
             { numRuns: NUM_RUNS },
         ));

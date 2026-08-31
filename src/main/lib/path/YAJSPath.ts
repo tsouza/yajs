@@ -1,4 +1,4 @@
-import { ANTLRInputStream, CommonTokenStream } from 'antlr4ts';
+import { ANTLRErrorListener, ANTLRInputStream, CommonTokenStream, RecognitionException, Recognizer } from 'antlr4ts';
 import { AbstractParseTreeVisitor } from 'antlr4ts/tree';
 import { Stack } from '../utils/Stack';
 import { ChildNode } from './operator/ChildNode';
@@ -87,7 +87,22 @@ export class YAJSPath {
         let pointer1 = this.size - 1;
         let pointer2 = jsonPath.size - 1;
 
-        if (!this.stack[pointer1].match(jsonPath.stack[pointer2])) {
+        const lastPattern = this.stack[pointer1];
+        const lastPosition = jsonPath.stack[pointer2];
+        // An array is a transparent pass-through for its parent key/root
+        // here specifically - i.e. only for '$' itself (the sole case where
+        // Root can be the pattern's own last/only operator) reaching an
+        // array's immediate elements, mirroring the transparency ChildNode
+        // already has via its own match()/matches(). This is deliberately
+        // NOT done by overriding Root.match() itself: Root.match() is also
+        // used, polymorphically, by the '..' scan below as a *strict*
+        // "have we scanned all the way back to the true document root"
+        // check, and giving it array-transparency there would let a '..'
+        // scan stop early at an unrelated *intermediate* array it merely
+        // passes through, rather than continuing back to the real root.
+        const rootThroughArray = lastPattern.getType() === PathOperator.Type.ROOT &&
+            lastPosition.getType() === PathOperator.Type.ARRAY;
+        if (!rootThroughArray && !lastPattern.match(lastPosition)) {
             return false;
         }
 
@@ -106,6 +121,16 @@ export class YAJSPath {
                     o2 = jsonPath.stack[pointer2--];
                 }
             } else if (o2.getType() === PathOperator.Type.ARRAY) {
+                // A matched array is transparent for its parent key/root, so
+                // this array level doesn't consume a pattern operator - but
+                // only ONE level: a matched array streams its immediate
+                // elements one at a time rather than being flattened
+                // (issue #14), so a SECOND consecutive array right beneath
+                // it belongs to one of those elements' own subtree, not to
+                // this key's path, and must not also be skipped transparently.
+                if (pointer2 >= 0 && jsonPath.stack[pointer2].getType() === PathOperator.Type.ARRAY) {
+                    return false;
+                }
                 pointer1++;
             } else if (!o1.match(o2)) {
                 return false;
@@ -206,12 +231,31 @@ export namespace YAJSPath {
 
         const inputStream = new ANTLRInputStream(path);
         const lexer = new YAJSLexer(inputStream);
+        lexer.removeErrorListeners();
+        lexer.addErrorListener(new ThrowingErrorListener());
         const tokenStream = new CommonTokenStream(lexer);
         const parser = new YAJSParser(tokenStream);
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ThrowingErrorListener());
 
         return new Visitor().
             visit(parser.path()).
             build();
+    }
+
+    // ANTLR's default ConsoleErrorListener only logs a syntax error to
+    // stderr - it does not stop parsing or throw, so ANTLR's own
+    // best-effort error recovery takes over and can produce a badly wrong
+    // (or, for some inputs, visitor-crashing) parse tree instead of a
+    // clean, catchable failure (issue #18). Replacing the default listener
+    // with one that throws makes parse() fail fast and predictably on the
+    // FIRST syntax error, for both the lexer and the parser.
+    // tslint:disable-next-line:max-classes-per-file
+    class ThrowingErrorListener implements ANTLRErrorListener<any> {
+        syntaxError<T>(_recognizer: Recognizer<T, any>, _offendingSymbol: T, line: number,
+                        charPositionInLine: number, msg: string, _e: RecognitionException): void {
+            throw new Error(`Invalid selector syntax at line ${line}:${charPositionInLine}: ${msg}`);
+        }
     }
 
     // tslint:disable-next-line:max-classes-per-file

@@ -1,5 +1,6 @@
 import { isEmpty } from 'lodash';
 import { ObjectDispatcher } from '../dispatcher/ObjectDispatcher';
+import { PathOperator } from '../path/PathOperator';
 import { YAJSPath } from '../path/YAJSPath';
 import { StreamPosition } from './StreamPosition';
 
@@ -75,7 +76,18 @@ export class StreamContext {
 
     startObject(): void {
         if (this.errored) { return; }
-        if (this.isInRoot()) {
+        if (this.position === undefined || this.position.peek().getType() === PathOperator.Type.ROOT) {
+            // Genuinely fresh boundary only (not merely "hasOnlyArrayIndex" -
+            // see startArray()'s matching check): replacing position here
+            // whenever hasOnlyArrayIndex was still true - even for an object
+            // that's actually a sibling deep in an already-open matched
+            // array - would throw away that array's own tracking, breaking
+            // a LATER array-typed sibling's ability to recognize itself as
+            // one of that same array's elements (issue #14). Leaving
+            // position untouched for a mid-array object is safe: the
+            // doOnValue() call below matches it correctly regardless
+            // (Root/ChildNode's array transparency reaches through to it
+            // exactly as it does for the top-level-fresh case).
             this.reset();
         }
         this.doOnValue();
@@ -115,9 +127,31 @@ export class StreamContext {
 
     startArray(): void {
        if (this.errored) { return; }
-       if (this.isInRoot()) {
-            this.reset();
+       if (this.position === undefined || this.position.peek().getType() === PathOperator.Type.ROOT) {
+            // A genuinely fresh boundary (document start, or back at bare
+            // root between NDJSON documents): replace position, but - unlike
+            // startObject() - do NOT match here. Per issue #14 a matched
+            // array is never captured as one whole value; only its elements
+            // are (see the ARRAY branch below), so matching against the
+            // array's own container position must never succeed.
+            this.position = new StreamPosition();
+       } else if (this.position.peek().getType() === PathOperator.Type.ARRAY) {
+            // Still within an already-open array's elements slot (see
+            // StreamPosition's arrayIndexDepth): this array-open IS one of
+            // that array's elements. Attempt a match/dispatcher spawn for it
+            // here - exactly like startObject() already does for every
+            // object it opens - instead of treating it as another fresh
+            // top-level candidate (issue #14's flattening bug). Checked
+            // structurally (not via isInRoot()) so this also fires for a
+            // named-key path like $.a reaching into a's array value, where
+            // hasOnlyArrayIndex is already false because of the object(s)
+            // above "a".
+            this.doOnValue();
        }
+       // Any other peek() (ChildNode/Wildcard: we've just entered a key and
+       // are about to see its value, which happens to open with '[') is
+       // neither of the above - the array's own container position, not one
+       // of an already-open array's elements - so nothing matches here.
        this.position.stepIntoArray();
        this.openContainers++;
        this.dispatch((dispatcher) => {
@@ -144,7 +178,39 @@ export class StreamContext {
         // onValue() directly - unlike objects/arrays, no startObject()/startArray()
         // ever runs first to initialize the position, so it must be handled here.
         if (this.isInRoot()) {
-            this.reset(value);
+            if (this.position === undefined) {
+                this.reset(value);
+            } else {
+                // Unlike the position===undefined case, do NOT replace
+                // position here: it may already be tracking an open array's
+                // elements slot (StreamPosition's arrayIndexDepth), and a
+                // later sibling element that turns out to be an array (see
+                // startArray()) needs that tracking to still be there -
+                // wiping it via reset() would make that sibling look like a
+                // fresh top-level candidate instead of one of this array's
+                // own elements (issue #14). Matching directly against the
+                // untouched position gives the same result for the truly
+                // fresh case too (peek() there is already Root, exactly what
+                // a fresh position would produce).
+                //
+                // increaseArrayIndex() first, mirroring startObject()'s/
+                // startArray()'s own leading call before their doOnValue():
+                // a scalar sitting directly in an already-open array's
+                // elements slot is exactly as much one of that array's
+                // indexed elements as an object or array sibling is - the
+                // matched-array bugfix above already covers stepIntoArray(),
+                // but this scalar path was still missing it, leaving
+                // pathIncludeArrayIndex's output at -1 for the scalar itself
+                // AND permanently desynced for every later sibling (since
+                // the increment this position was relying on other siblings
+                // to eventually provide never happened). Safe to call
+                // unconditionally: on a genuinely fresh Root-only position
+                // (e.g. a bare scalar at the document root), peek() has no
+                // `index` field, so increaseArrayIndex() is a no-op, exactly
+                // like it already is at the top of stepIntoObject().
+                this.position.increaseArrayIndex();
+                this.match(value);
+            }
         } else {
             this.position.increaseArrayIndex();
             this.onValueListener(value);

@@ -7,7 +7,10 @@ process.stdin.
     pipe(yajs(path)).
     on('data', (data) => process.stdout.
         write(`${JSON.stringify((data as any).value)}\n`)).
-    on('error', (err) => process.stderr.write(err.stack));
+    on('error', (err) => {
+        process.exitCode = 1;
+        process.stderr.write(err.stack);
+    });
 
 function findPath() {
     const argv = process.argv;
