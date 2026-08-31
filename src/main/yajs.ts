@@ -21,12 +21,26 @@ export default function yajs(path: string, options = {
             // stream end) has no trailing `,`/`]`/`}` to trigger the flush below -
             // flush whatever is still pending now that input has ended.
             parser.flushPendingString();
-            stream.emit('end');
+            // Signal end via through's own queue rather than stream.emit('end')
+            // directly: through's internal drain() only emits 'end' once every
+            // already-queued match has been drained out past `stream.paused` (see
+            // the stream.queue() call below for why that matters) - emitting 'end'
+            // directly here would jump the queue and fire it before a still-paused
+            // consumer has received matches queued earlier in this same tick.
+            stream.queue(null);
         });
 
     const yajsPath = YAJSPath.parse(path);
     const context = new StreamContext(yajsPath,
-        (p, value) => stream.emit('data', { path: p, value }),
+        // Route matches through through's own queue()/push() (they're the same
+        // function - see node_modules/through/index.js) instead of
+        // stream.emit('data', ...) directly. queue() appends to through's
+        // internal buffer and only emits 'data' while `!stream.paused`
+        // (drain()), which is the only path that respects the pause Node's
+        // .pipe() applies on backpressure from a slow downstream consumer -
+        // emit('data', ...) bypasses that entirely and forces synchronous
+        // delivery regardless of consumer readiness (issue #36).
+        (p, value) => stream.queue({ path: p, value }),
         options.pathIncludeArrayIndex,
         (err) => {
             state.errored = true;
