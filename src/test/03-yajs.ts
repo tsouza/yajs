@@ -702,6 +702,49 @@ describe('yajs', () => {
             }));
     });
 
+    // Regression tests for GitHub issue #51: a leading UTF-8 byte-order mark
+    // (EF BB BF) used to be rejected as a hard parse error
+    // ('Unexpected "ï" at position 0'), rather than being tolerated, even
+    // though BOM-prefixed JSON/NDJSON is a common artifact of Windows/Excel
+    // tooling and some editors. JsonSaxParser now strips a leading BOM
+    // before tokenizing - but only when it's genuinely the very first thing
+    // in the whole stream, never anywhere else (e.g. a BOM before a later
+    // NDJSON document must still be rejected exactly as before).
+    describe('leading UTF-8 BOM is stripped (issue #51)', () => {
+
+        it('parses BOM-prefixed input identically to the same JSON without a BOM', () => {
+            const json = JSON.stringify({ a: 1, b: [1, 2, 3] });
+            return Promise.all([
+                testJson(json, '$'),
+                // The escaped BOM character (U+FEFF) encodes, via
+                // Buffer.from()'s default utf8 encoding, to exactly the
+                // same EF BB BF bytes a real BOM-prefixed file would have.
+                testJson(String.fromCharCode(0xFEFF) + json, '$'),
+            ]).then(([withoutBom, withBom]) => {
+                expect(withBom).to.deep.equal(withoutBom);
+            });
+        });
+
+        it('does not strip a BOM that appears mid-stream, e.g. before a later NDJSON document', () =>
+            new Promise<void>((resolve, reject) => {
+                const stream = yajs('$');
+                stream.
+                    on('data', () => undefined).
+                    on('end', () => reject(new Error('expected parsing to fail, but the stream ended cleanly'))).
+                    on('error', (err: Error) => {
+                        try {
+                            expect(err.message).to.match(/Unexpected/);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                stream.write(Buffer.from('{"x":1} '));
+                stream.write(Buffer.from(String.fromCharCode(0xFEFF) + '{"y":2}'));
+                stream.end();
+            }));
+    });
+
     // Regression tests for GitHub issue #38: when a selector matches a
     // container AND something independently matched nested inside it
     // (typical of '..'/wildcard selectors), the ancestor's own captured
