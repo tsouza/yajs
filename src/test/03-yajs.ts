@@ -578,6 +578,33 @@ describe('yajs', () => {
             }));
     });
 
+    // Regression tests for GitHub issue #37: AbstractFilteredOperator.
+    // matchFilter() discarded the key-name-equality `matches` boolean
+    // whenever a filter expression was attached, so '[<filter>]<key>'
+    // matched every sibling key inside a filter-satisfying ancestor instead
+    // of just the one literally named <key>. See 02-path.ts for the
+    // parser-level unit tests pinning the fix in matchFilter() itself; these
+    // confirm it end-to-end through the real yajs() entry point.
+    describe('filter does not drop the key-name check (issue #37)', () => {
+
+        it('matches only the named key, not every sibling, inside a filtered ancestor ' +
+            '($..[key1]child vs {"key1":{"child":1,"other":2}})', () =>
+            testJson('{"key1":{"child":1,"other":2}}', '$..[key1]child').then((array) => {
+                expect(array).to.deep.equal([ { path: [ 'key1', 'child' ], value: 1 } ]);
+            }));
+
+        it('produces exactly the README\'s documented output for $..[!key1]child ' +
+            '(must not regress into spurious extra/duplicate entries)', () =>
+            testJson(
+                '{"array":[{"key1":{"child":"value1"}},{"key2":{"child":"value2"}}]}',
+                '$..[!key1]child').
+            then((array) => {
+                expect(array).to.deep.equal([
+                    { path: [ 'array', 'key2', 'child' ], value: 'value2' },
+                ]);
+            }));
+    });
+
     // Regression test for GitHub issue #36: matches used to be delivered via
     // stream.emit('data', ...) directly, which completely bypasses `through`'s
     // own queue()/drain() buffering - the only mechanism that actually checks
