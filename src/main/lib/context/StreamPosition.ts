@@ -237,7 +237,16 @@ export class StreamPosition extends YAJSPath {
     pop(): void {
         const peek = this.peek();
         if (peek && 'index' in peek) {
-            (peek as any).index = 0;
+            // Issue #60: must match ArrayIndex's own constructor (-1), not 0
+            // - increaseArrayIndex() always pre-increments before recording
+            // a new element's index, so a fresh/recycled slot must start one
+            // below the first real index (0) for that first increment to
+            // land correctly. Resetting to 0 here made a reused slot's first
+            // increaseArrayIndex() call go 0 -> 1 instead of -1 -> 0, so
+            // every index reported for a sibling array reusing this
+            // position-stack slot (yajs's slot-reuse optimization) was off
+            // by one.
+            (peek as any).index = -1;
         }
         super.pop();
         const pathDepth = this.pathDepth();

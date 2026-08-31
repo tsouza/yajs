@@ -1056,6 +1056,69 @@ describe('yajs', () => {
             }));
     });
 
+    // Regression tests for GitHub issue #60: StreamPosition.pop() reset a
+    // closed array's ArrayIndex.index field to 0 when the position-stack
+    // slot was about to be recycled for a sibling array at the same depth
+    // (yajs's slot-reuse optimization), instead of -1 (ArrayIndex's own
+    // constructor value). increaseArrayIndex() always pre-increments before
+    // recording a new element's index, so the reused slot's first
+    // increaseArrayIndex() call went 0 -> 1 instead of -1 -> 0, making every
+    // reported pathIncludeArrayIndex index for that reused array off by one.
+    // Only the reported path metadata was wrong - matched values were always
+    // correct. Fixed by resetting to -1 in pop(), matching the constructor.
+    describe('pathIncludeArrayIndex reports correct indices for sibling arrays sharing a stack depth (issue #60)', () => {
+
+        it('reports the correct index for each element of a second sibling array at the same depth ' +
+            '($.*.* vs [[10,11],[20,21]])', () =>
+            testJson('[[10,11],[20,21]]', '$.*.*', true).then((array) => {
+                expect(array).to.deep.equal([
+                    { path: [ 0, 0 ], value: 10 },
+                    { path: [ 0, 1 ], value: 11 },
+                    { path: [ 1, 0 ], value: 20 },
+                    { path: [ 1, 1 ], value: 21 },
+                ]);
+            }));
+
+        it('reports the correct index across sibling arrays nested inside sibling objects ' +
+            '($..items.* vs {"groups":[{"items":[10,11]},{"items":[20,21]}]})', () =>
+            testJson(
+                '{"groups":[{"items":[10,11]},{"items":[20,21]}]}',
+                '$..items.*', true).
+            then((array) => {
+                expect(array).to.deep.equal([
+                    { path: [ 'groups', 0, 'items', 0 ], value: 10 },
+                    { path: [ 'groups', 0, 'items', 1 ], value: 11 },
+                    { path: [ 'groups', 1, 'items', 0 ], value: 20 },
+                    { path: [ 'groups', 1, 'items', 1 ], value: 21 },
+                ]);
+            }));
+
+        it('reports correct indices for a single array with no sibling slot reuse ' +
+            '($.* vs [100,200,300])', () =>
+            testJson('[100,200,300]', '$.*', true).then((array) => {
+                expect(array).to.deep.equal([
+                    { path: [ 0 ], value: 100 },
+                    { path: [ 1 ], value: 200 },
+                    { path: [ 2 ], value: 300 },
+                ]);
+            }));
+
+        it('reports correct indices across 4 sibling arrays at the same depth, not just the first reuse ' +
+            '($.*.* vs [[10,11],[20,21],[30,31],[40,41]])', () =>
+            testJson('[[10,11],[20,21],[30,31],[40,41]]', '$.*.*', true).then((array) => {
+                expect(array).to.deep.equal([
+                    { path: [ 0, 0 ], value: 10 },
+                    { path: [ 0, 1 ], value: 11 },
+                    { path: [ 1, 0 ], value: 20 },
+                    { path: [ 1, 1 ], value: 21 },
+                    { path: [ 2, 0 ], value: 30 },
+                    { path: [ 2, 1 ], value: 31 },
+                    { path: [ 3, 0 ], value: 40 },
+                    { path: [ 3, 1 ], value: 41 },
+                ]);
+            }));
+    });
+
     // Regression tests for GitHub issue #37: AbstractFilteredOperator.
     // matchFilter() discarded the key-name-equality `matches` boolean
     // whenever a filter expression was attached, so '[<filter>]<key>'
