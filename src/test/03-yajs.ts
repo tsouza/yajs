@@ -1159,6 +1159,86 @@ describe('yajs', () => {
             });
         });
     });
+    // Regression tests for GitHub issue #61: writing a plain JS string (not
+    // a Buffer) to the stream - either directly via .write()/.end() or via
+    // .pipe() from a Readable in string/encoded mode - used to fail with a
+    // misleading, content-independent NUL-byte error instead of parsing
+    // correctly. JsonSaxParser.parse() does raw numeric byte indexing
+    // (buffer[i] compared against byte constants), which only makes sense
+    // for a Buffer; `through`'s own write() does no string-to-Buffer
+    // coercion, so a string chunk silently corrupted every comparison
+    // instead of failing loudly - every buffer[i] read a one-character
+    // string, every numeric comparison failed, and parsing fell through to
+    // charError(), where Number(char) is NaN and
+    // String.fromCharCode(NaN) produces a NUL character, regardless of what
+    // the actual input was. Fixed in yajs.ts by converting a string chunk to
+    // a Buffer (UTF-8, matching JSON's own required encoding) at the one
+    // point both .write(str) and .pipe() funnel through - see yajs.ts's own
+    // comment on the through() write callback for the full reasoning,
+    // including why the fix belongs there and not inside JsonSaxParser
+    // itself.
+    describe('string (non-Buffer) input to write()/pipe() (issue #61)', () => {
+
+        it('parses a plain string written via .write(), identically to the equivalent Buffer (issue\'s own repro)', () => {
+            const json = JSON.stringify({ a: 1 });
+            return Promise.all([
+                testJson(json, '$'),
+                testJsonAsString(json, '$'),
+            ]).then(([viaBuffer, viaString]) => {
+                expect(viaString.map((e) => e.value)).to.deep.equal(viaBuffer.map((e) => e.value));
+                expect(viaString[0].value).to.deep.equal({ a: 1 });
+            });
+        });
+
+        it('parses a plain string piped from a Readable in string/encoded mode (issue\'s second repro)', () =>
+            new Promise<void>((resolve, reject) => {
+                const result: any[] = [];
+                const stream = yajs('$.a');
+                stream.
+                    on('data', (data: any) => result.push(data)).
+                    on('end', () => {
+                        try {
+                            expect(result).to.deep.equal([{ path: ['a'], value: 1 }]);
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    }).
+                    on('error', reject);
+                const src = Readable.from([JSON.stringify({ a: 1 })]);
+                src.setEncoding('utf8');
+                src.pipe(stream);
+            }));
+
+        it('correctly UTF-8 encodes non-ASCII content written as a plain string, not just ASCII', () => {
+            const json = JSON.stringify({ a: 'héllo 世界' });
+            return testJsonAsString(json, '$.a').then((array) => {
+                expect(array).to.have.lengthOf(1);
+                expect(array[0].value).to.equal('héllo 世界');
+            });
+        });
+
+        it('leaves ordinary Buffer input completely unaffected (must not regress the documented, existing usage)', () => {
+            const json = JSON.stringify({ a: 1, b: [1, 2, 3] });
+            return testJson(json, '$').then((array) => {
+                expect(array).to.have.lengthOf(1);
+                expect(array[0].value).to.deep.equal({ a: 1, b: [1, 2, 3] });
+            });
+        });
+
+        it('still produces identical results when a document\'s string content arrives split across ' +
+            'multiple string .write() calls at every character boundary (mirrors 05-chunk-boundary.ts\'s ' +
+            'Buffer-based coverage, for the new string-conversion layer)', async () => {
+            const json = JSON.stringify({ a: 'héllo 世界' });
+            const baseline = await testJsonAsString(json, '$');
+            expect(baseline).to.have.lengthOf(1);
+
+            for (let i = 1; i < json.length; i++) {
+                const actual = await testJsonAsStringChunks([json.slice(0, i), json.slice(i)], '$');
+                expect(actual, `split at char offset ${i}/${json.length}`).to.deep.equal(baseline);
+            }
+        });
+    });
 });
 
 function test(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {
@@ -1182,6 +1262,38 @@ function testJson(json: string, path: string, pathIncludeArrayIndex = false): Pr
             on('end', () => resolve(result)).
             on('error', (err: Error) => reject(err));
         stream.write(Buffer.from(json));
+        stream.end();
+    });
+}
+
+// Same as testJson() above, but writes the JSON document as a plain JS
+// string (issue #61) instead of Buffer.from(json) - exercises the
+// string-to-Buffer conversion added in yajs.ts.
+function testJsonAsString(json: string, path: string, pathIncludeArrayIndex = false): Promise<any[]> {
+    return new Promise<any[]>((resolve, reject) => {
+        const result: any[] = [];
+        const stream = yajs(path, { pathIncludeArrayIndex });
+        stream.
+            on('data', (data: any) => result.push(data)).
+            on('end', () => resolve(result)).
+            on('error', (err: Error) => reject(err));
+        stream.write(json);
+        stream.end();
+    });
+}
+
+// Same as testJsonAsString() above, but delivers the document as several
+// separate plain-string .write() calls instead of one - mirrors
+// 05-chunk-boundary.ts's chunked-Buffer coverage, for string input.
+function testJsonAsStringChunks(chunks: string[], path: string): Promise<any[]> {
+    return new Promise<any[]>((resolve, reject) => {
+        const result: any[] = [];
+        const stream = yajs(path);
+        stream.
+            on('data', (data: any) => result.push(data)).
+            on('end', () => resolve(result)).
+            on('error', (err: Error) => reject(err));
+        chunks.forEach((chunk) => stream.write(chunk));
         stream.end();
     });
 }
