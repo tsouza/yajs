@@ -637,6 +637,17 @@ describe('yajs', () => {
                 expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
             }));
 
+        // Byte-identical input/path/assertion to 'still streams a flat array
+        // of scalars one scalar at a time (must not regress)' in the issue
+        // #14/#15 block above - kept as its own separate test anyway,
+        // matching 04-error-handling.ts's own precedent of reusing the same
+        // fixture across two describe blocks (see its issue #56 block's
+        // "guards against a regression of the issue #9 stale-string fix
+        // above" test): each copy is this repro's dedicated regression guard
+        // for a DIFFERENT issue (#14/#15's flattening bug here, #20's
+        // wildcard-retry bug there), so deleting either one would leave the
+        // other issue without its own named guard even though today they
+        // happen to coincide.
         it('still streams a flat array of scalars one at a time via bare $ (regression guard, unaffected by the wildcard-retry fix)', () =>
             testJson('[1,2,3]', '$').then((array) => {
                 expect(array.map((e) => e.value)).to.deep.equal([1, 2, 3]);
@@ -861,7 +872,7 @@ describe('yajs', () => {
                 ]);
             }));
 
-        it('only loses the corrupted span, not sibling keys outside it (own repro 3: $..a vs {"a":{"b":{"a":{"c":1}}}})', () =>
+        it('reports both the outer and inner match\'s own value fully and independently, with no cross-contamination between them (own repro 3: $..a vs {"a":{"b":{"a":{"c":1}}}})', () =>
             testJson('{"a":{"b":{"a":{"c":1}}}}', '$..a').then((array) => {
                 expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
                     { path: [ 'a', 'b', 'a' ], value: { c: 1 } },
@@ -961,6 +972,17 @@ describe('yajs', () => {
             }));
     });
 
+    // Builds a JSON document `depth` levels deep, each level a single object
+    // with one key (`key`), bottoming out at the scalar `1` - the shared
+    // pathological repro shape for both the issue #34 and issue #44
+    // performance-guard tests below ('$..a' against this matches at every
+    // one of `depth` levels). Shared rather than defined separately in each
+    // describe block below (they used to be two identical copies) since
+    // both need the exact same shape.
+    function buildDeepChain(depth: number, key: string): string {
+        return `${Array(depth).fill(`{"${key}":`).join('')}1${'}'.repeat(depth)}`;
+    }
+
     // Regression + performance-guard tests for GitHub issue #34: a '..'-
     // containing path degraded quadratically with document nesting depth,
     // because YAJSPath.match()'s DESCENDANT branch walked the *entire*
@@ -986,10 +1008,6 @@ describe('yajs', () => {
     // describes is.
     describe('descendant matching stays roughly linear with document depth (issue #34)', () => {
 
-        function buildDeepChain(depth: number, key: string): string {
-            return `${Array(depth).fill(`{"${key}":`).join('')}1${'}'.repeat(depth)}`;
-        }
-
         it('matches a 5,000-deep chain of the same repeated key in well under the pre-fix time (own repro shape: $..a)', () => {
             const depth = 5000;
             const json = buildDeepChain(depth, 'a');
@@ -997,17 +1015,48 @@ describe('yajs', () => {
             return testJson(json, '$..a').then((array) => {
                 const elapsedMs = Date.now() - start;
                 expect(array).to.have.lengthOf(depth);
-                // Issue #34 measured ~931ms at this exact depth pre-fix, and
-                // ~14s at depth 20,000 (quadratic); this fix measures well
-                // under 300ms at depth 5,000 locally. A generous upper bound
-                // for a slow CI machine - comfortably above the fixed
-                // timing (leaving headroom for the inherent O(depth)
-                // matches x O(depth) average path length output cost
-                // described above) but nowhere near what either the
-                // pre-fix flat ~931ms or its quadratic trajectory would
-                // produce here, so an accidental revert would still be
-                // caught.
-                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(4000);
+                // A 4000ms bound here used to be justified by an old
+                // pre-fix "~931ms" figure with reasoning that was
+                // arithmetically backwards (4000 > 931 is not "nowhere
+                // near" it - a revert would sail under 4000ms undetected).
+                //
+                // Re-measured empirically instead of trusting that old
+                // comment, both with a hand-reverted issue #34 fix (forcing
+                // nearestAncestorIndex() to always fall back to the O(depth)
+                // linear scan, in a scratch copy, discarded after measuring -
+                // never committed) and with the real fix in place, running
+                // this exact scenario standalone, 20+ runs each on a heavily
+                // loaded shared machine (load average ~50):
+                //   fixed (standalone):    203-587ms   (max observed 587ms)
+                //   reverted (standalone): 973-1262ms  (min observed 973ms)
+                // That gap (~2x) is real but only moderate - and standalone
+                // timing understates what this test actually experiences
+                // inside `npm test`: vitest runs multiple test files as
+                // concurrent workers, so this test also competes with e.g.
+                // the depth-20,000 tests elsewhere in this same suite.
+                // Confirmed by forcing this assertion to always fail and
+                // running the FULL suite (`npm test`) repeatedly to read the
+                // real elapsedMs off the failure message: 10 full-suite runs
+                // measured 478-740ms for the FIXED build under that
+                // contention - already within reach of a naively-chosen
+                // ~800-900ms bound, which is why an earlier pass at this
+                // bound (800ms) flaked once in 4 full-suite runs.
+                //
+                // Given the standalone reverted-min (973ms) sits close
+                // enough to the full-suite fixed-max (740ms) that ordinary
+                // test-suite contention can plausibly close the gap further
+                // still, this test is deliberately NOT relied on as the
+                // primary issue #34 regression discriminator - that job
+                // belongs to the isolated-scan test immediately below, whose
+                // fixed/reverted gap is ~40x (not ~2x) and comfortably
+                // survives this same kind of contention (see its own
+                // comment for those numbers). This test's remaining job is
+                // narrower and coarser: a sanity check that the whole
+                // match+output pipeline for this repro shape hasn't
+                // regressed to something dramatically worse, with generous
+                // headroom (roughly 2x the worst full-suite-contention run
+                // observed) so it doesn't flake here doing that narrower job.
+                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(1500);
             });
         }, 20000);
 
@@ -1039,20 +1088,41 @@ describe('yajs', () => {
                 });
             }
 
+            // This used to compare depth-20,000 against a ratio of a
+            // depth-2,000 sample (large < max(small, 1) * 30). That's fragile:
+            // `small` is itself dominated by linear tokenizer/parsing cost
+            // that has nothing to do with the regression this test isolates,
+            // so ordinary timing noise in `small` inflates the bound
+            // proportionally - a noisy ~100ms `small` sample would raise the
+            // bound to 3000ms, comfortably passing a REVERTED fix's ~2.9s
+            // measurement at depth 20,000 (verified empirically) and missing
+            // the regression entirely.
+            //
+            // Fixed by comparing depth 20,000 alone against a fixed absolute
+            // ceiling, calibrated from real fixed-vs-reverted measurements at
+            // that exact depth (hand-reverted issue #34 fix in a scratch
+            // copy - nearestAncestorIndex() forced to always fall back to the
+            // O(depth) linear scan - never committed, discarded after
+            // measuring), 3+ runs each on a heavily loaded shared machine
+            // (load average ~50):
+            //   fixed:    62-307ms      (max observed 307ms)
+            //   reverted: 13,043-17,012ms (min observed 13,043ms)
+            // The gap here is enormous (~40x) because this scan is isolated
+            // from the O(depth) output-construction cost the combined test
+            // above still pays - reverting issue #34 turns this specific
+            // scan from near-linear into truly quadratic, not just a bigger
+            // constant factor. 3000ms leaves ~10x headroom above the worst
+            // fixed run observed while staying ~4x below the best (fastest)
+            // reverted run observed - there is no realistic load spike that
+            // closes a gap this wide, so a single absolute ceiling is both
+            // simpler and more robust here than deriving one from a noisy
+            // small-depth sample.
             return timeScan(1000). // warm up the JIT first
-                then(() => timeScan(2000)).
-                then((small) => timeScan(20000).then((large) => {
-                    // A genuinely near-O(depth) (or better) scan should take
-                    // on the order of 10x as long for 10x the depth; the
-                    // pre-fix O(depth) *per attempt*, attempted at every one
-                    // of O(depth) depths, took on the order of 100x as long.
-                    // 30x is comfortably below quadratic and comfortably
-                    // above ordinary timing noise (mirrors
-                    // 08-stream-context.ts's own issue #8 ratio test).
-                    expect(large, `small=${small}ms large=${large}ms`).
-                        to.be.lessThan(Math.max(small, 1) * 30);
-                }));
-        }, 30000);
+                then(() => timeScan(20000)).
+                then((large) => {
+                    expect(large, `took ${large}ms`).to.be.lessThan(3000);
+                });
+        }, 15000);
 
         it('a non-descendant path is unaffected by the fix (must not regress the common case)', () => {
             const depth = 20000;
@@ -1089,10 +1159,6 @@ describe('yajs', () => {
     // itself and its own linked follow-up discussion for that nuance.
     describe('per-match path materialization stays cheap even when every level matches (issue #44)', () => {
 
-        function buildDeepChain(depth: number, key: string): string {
-            return `${Array(depth).fill(`{"${key}":`).join('')}1${'}'.repeat(depth)}`;
-        }
-
         it('matches a 20,000-deep chain of the same repeated key well under the pre-#44-fix time (own repro shape: $..a, combined match+output cost)', () => {
             const depth = 20000;
             const json = buildDeepChain(depth, 'a');
@@ -1100,18 +1166,64 @@ describe('yajs', () => {
             return testJson(json, '$..a').then((array) => {
                 const elapsedMs = Date.now() - start;
                 expect(array).to.have.lengthOf(depth);
-                // Pre-#44 (i.e. with only issue #34's backward-scan fix)
-                // measured ~11.7s at this depth; post-#44 measures roughly
-                // 0.8-1.1s locally, up to ~6.5s observed on a heavily
-                // loaded shared machine (load average ~20). A generous
-                // upper bound - comfortably below what an accidental
-                // revert of #44 (while #34 stays fixed) would produce, and
-                // nowhere near what having neither fix would produce -
-                // while leaving real headroom above worst-case-observed
-                // contention so this doesn't flake under load.
-                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(9000);
+                // Why this stays an absolute-time bound rather than a
+                // ratio (unlike the isolated-scan test in the issue #34
+                // block above): issue #44 is a pure CONSTANT-FACTOR fix, not
+                // a complexity-class fix like #34's. Even with #44 fixed,
+                // this exact repro shape (a '..' selector matching at every
+                // one of D depths) is inherently Theta(D^2): D delivered path
+                // arrays of length 1..D is Theta(D^2) total array cells, and
+                // producing each one is real, unavoidable work (see the
+                // per-match path-materialization comment block above this
+                // describe(), and this repo's own dedicated investigation
+                // into whether that Theta(D^2) can be eliminated at all -
+                // it can't, without an API-breaking change). #44 removed a
+                // large redundant constant (re-filtering the *entire*
+                // position stack on every single path() call instead of
+                // copying just the already-tracked real segments) but did
+                // NOT change the growth order - so comparing this same
+                // build's own small-depth vs. large-depth timing (the
+                // ratio approach) would show the SAME quadratic ratio
+                // whether #44 is fixed or reverted, and could never catch a
+                // regression here. Only a direct comparison against a
+                // separately-measured reverted build can.
+                //
+                // This bound has a real history of being too tight: PR #70's
+                // own verification notes found a #44-revert measurement as
+                // low as ~3.3s on a fast/idle machine, overlapping a
+                // heavily-loaded FIXED measurement of ~6.5s - and this very
+                // session reproduced that overlap risk directly: on a
+                // machine at load average ~50 (`uptime`), 21 fixed-code runs
+                // at this depth ranged 3175-9040ms (one run landed at
+                // 9040ms, 40ms from tripping the *old* 9000ms bound), while
+                // 6 runs with issue #44 hand-reverted (#34's fix kept intact,
+                // in a scratch copy - path() forced to fall back to the base
+                // O(depth)-per-call scan-and-filter - never committed,
+                // discarded after measuring) ranged 17,490-20,906ms. So on
+                // THIS machine, right now, fixed-max (9040ms) and
+                // reverted-min (17,490ms) do NOT overlap - roughly a 2x gap -
+                // but that gap is far smaller than the ~10-15x constant-
+                // factor #44's own PR reported, because at this depth the
+                // Theta(D^2) total allocation (~2x10^8 array cells either
+                // way) makes GC/memory-pressure cost dominate over the
+                // per-call constant on a memory-constrained box (this
+                // session's `free -h` showed swap fully exhausted), for
+                // BOTH the fixed and reverted builds alike.
+                //
+                // 13000ms sits between those two empirical extremes: ~44%
+                // headroom above the worst fixed run this session observed,
+                // and ~26% margin below the best (fastest) reverted run this
+                // session observed. That is real but not huge - a
+                // meaningfully worse load spike than this session's own
+                // (already load-average-50) conditions could still overlap
+                // it. There is no absolute-time bound that can fully rule
+                // that out for a fix whose entire effect is a constant
+                // factor rather than a complexity-class change; 13000ms is
+                // this session's best empirically-grounded estimate, not a
+                // guarantee.
+                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(13000);
             });
-        }, 20000);
+        }, 30000);
 
         it('still produces a correct, independent path array per match when a key is reused multiple times in the same object, mixed with arrays and pathIncludeArrayIndex (adversarial: exercises the segment-baseline truncate/replace logic directly)', () =>
             testJson(

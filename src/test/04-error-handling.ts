@@ -387,7 +387,10 @@ describe('deeply nested arrays stay linear, not quadratic (issue #8)', () => {
 // Pipes a stream-tests fixture through yajs() and collects every 'error'
 // event (instead of rejecting on the first one, since malformed input is
 // expected to error). See helpers/runSettled.ts for why this settles on a
-// quiet period rather than waiting on 'end'.
+// quiet period rather than waiting on 'end'. Not the same function as
+// 06-conformance.ts's similarly-named-but-differently-shaped
+// runToSettledConformance() (different defaults, different fixture-directory
+// assumptions, deliberately renamed there to avoid the collision).
 function runToSettled(json: string, path = '$'): Promise<Error[]> {
     return runSettled(`${__dirname}/stream-tests/${json}.json`, { path }).
         then((result) => result.errors);

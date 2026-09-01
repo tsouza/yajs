@@ -7,6 +7,15 @@ export interface RunSettledResult {
     values: any[];
     errors: Error[];
     ended: boolean;
+    // True if a 'data' event was observed any time after the first 'error'
+    // event - i.e. the parser kept (or resumed) emitting values once it had
+    // already reported the document invalid, as opposed to legitimate data
+    // that streamed out BEFORE the error (which many malformed fixtures -
+    // e.g. valid earlier array elements ahead of a later syntax error -
+    // genuinely and correctly produce). Callers that only care about "no
+    // error" cases can ignore this; callers checking a must-reject fixture
+    // want this to stay false. See 06-conformance.ts's n_ (must-reject) loop.
+    dataEmittedAfterFirstError: boolean;
 }
 
 export interface RunSettledOptions {
@@ -39,6 +48,7 @@ export function runSettled(filePath: string, opts: RunSettledOptions = {}): Prom
         const values: any[] = [];
         const errors: Error[] = [];
         let ended = false;
+        let dataEmittedAfterFirstError = false;
         let settleTimer: ReturnType<typeof setTimeout>;
         let settled = false;
         let grantedGrace = false;
@@ -55,7 +65,7 @@ export function runSettled(filePath: string, opts: RunSettledOptions = {}): Prom
             // later tests' event-loop timing.
             source.destroy();
             target.removeAllListeners();
-            resolve({ values, errors, ended });
+            resolve({ values, errors, ended, dataEmittedAfterFirstError });
         };
         // The quiet-period timer starts counting from t=0 (see
         // scheduleSettle()'s first call below), racing the real event
@@ -94,7 +104,11 @@ export function runSettled(filePath: string, opts: RunSettledOptions = {}): Prom
 
         source.
             pipe(target).
-            on('data', (d: any) => { values.push(d); scheduleSettle(); }).
+            on('data', (d: any) => {
+                if (errors.length > 0) { dataEmittedAfterFirstError = true; }
+                values.push(d);
+                scheduleSettle();
+            }).
             on('error', (err: Error) => { errors.push(err); scheduleSettle(); }).
             on('end', () => { ended = true; settle(); });
     });
