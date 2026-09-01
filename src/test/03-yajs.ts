@@ -1053,10 +1053,22 @@ describe('yajs', () => {
                 // comment for those numbers). This test's remaining job is
                 // narrower and coarser: a sanity check that the whole
                 // match+output pipeline for this repro shape hasn't
-                // regressed to something dramatically worse, with generous
-                // headroom (roughly 2x the worst full-suite-contention run
-                // observed) so it doesn't flake here doing that narrower job.
-                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(1500);
+                // regressed to something dramatically worse.
+                //
+                // 1500ms (this session's first attempt at "generous
+                // headroom") still flaked during independent verification:
+                // a full-suite run under sustained load average 20-29
+                // (worse than the 10-run sample this bound was originally
+                // calibrated against) measured 2062ms on fixed code alone -
+                // proof that under heavy-enough contention, fixed-code
+                // timing for this narrow sanity check can exceed even
+                // lightly-loaded reverted-code timing (973-1262ms
+                // standalone), so no bound here can be BOTH tight and
+                // contention-proof. Widened to 6000ms - comfortably above
+                // the 2062ms spike observed, while this test's actual
+                // regression-detection job stays delegated to the isolated-
+                // scan test below (see its own comment).
+                expect(elapsedMs, `took ${elapsedMs}ms`).to.be.lessThan(6000);
             });
         }, 20000);
 
