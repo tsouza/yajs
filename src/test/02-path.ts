@@ -484,6 +484,36 @@ describe('path match', () => {
 
             expect(pattern.match(position)).to.equal(false);
         });
+
+        // Mutation-testing gap: the collapse loop's own condition
+        // (WILDCARD-and-unfiltered) OR (DESCENDANT) - i.e. "keep collapsing
+        // through a run of bare wildcards/descendants" - has no test that
+        // fails if that OR is flipped to AND (which makes the loop body
+        // never run at all, since a single prevScan can never be both
+        // WILDCARD and DESCENDANT simultaneously). Every existing case above
+        // this comment still happens to match correctly even under that
+        // flip: issue #45's backtracking search is resilient enough to
+        // recover the right answer through plain object-key chains (verified
+        // by differential fuzzing the flipped mutant against 50,000 random
+        // child/wildcard/descendant selectors over object-only positions -
+        // zero divergences). The flip only produces an observable difference
+        // once ARRAY levels are involved - confirmed by the same fuzzing
+        // once array pushes were mixed in - which makes sense: an
+        // uncollapsed wildcard's "how many real hops are still owed" budget
+        // (mandatoryHops) silently resets to 0, over-widening the backward
+        // scan's search ceiling, and a directly-nested array (no object key
+        // between the two array levels) is the simplest shape where that
+        // over-widened ceiling accepts a candidate a correctly-narrowed scan
+        // would have excluded.
+        it('does not silently over-match a directly-nested array via $.*..* when the collapse loop is broken (own repro, found by differential fuzzing against a flipped OR/AND mutant)', () => {
+            const pattern = YAJSPath.parse('$.*..*');
+
+            const position = new YAJSPath.Builder().build();
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(true);
+        });
     });
 
     // Regression tests for GitHub issue #38's "dropped match" variant (see
@@ -535,6 +565,32 @@ describe('path match', () => {
             position.push(new ChildNode('a'));
 
             expect(pattern.match(position)).to.equal(true);
+        });
+
+        // Mutation-testing gap: tolerateConsecutiveArrays's own o1Type check
+        // ("only a WILDCARD may tolerate a consecutive array run, never a
+        // plain key/root") has no test that fails if the `&&` joining it to
+        // the rest of the condition is loosened enough to apply the
+        // tolerance regardless of o1Type. Found by differential fuzzing a
+        // `tolerateConsecutiveArrays` mutant that forces its o1Type clause
+        // to unconditionally true against ~15,000 random selectors: this is
+        // the shrunk minimal repro - a WILDCARD standing for key "a" (whose
+        // own consecutive-array tolerance is legitimate) must not leak that
+        // tolerance into the FOLLOWING named key "b", which sits two
+        // directly-nested array levels below "a.b" with nothing there to
+        // select - "b" itself is a plain key, never a wildcard, so it must
+        // not reach through more than one array level.
+        it('does not let a wildcard\'s consecutive-array tolerance leak into the NAMED key that follows it (own repro: $.*.b vs {"a":{"b":[[...]]}}, found by differential fuzzing)', () => {
+            const pattern = YAJSPath.parse('$.*.b');
+
+            const position = new YAJSPath.Builder().
+                addChild('a').
+                addChild('b').
+                build();
+            position.push(new ArrayIndex());
+            position.push(new ArrayIndex());
+
+            expect(pattern.match(position)).to.equal(false);
         });
     });
 
@@ -808,6 +864,129 @@ describe('path match', () => {
         });
     });
 
+    // Regression tests driving a real StreamPosition directly through
+    // stepIntoObject()/updateObjectEntry()/stepOutObject()/stepIntoArray()/
+    // increaseArrayIndex()/stepOutArray(), the same style as the ancestor-key
+    // cache block above, but for the sibling path-segment cache (issue #44:
+    // mSegments/mSegmentBaseline backing path()). Unlike the ancestor-key
+    // cache, this bookkeeping has no dedicated direct coverage anywhere else
+    // - every other test only observes it indirectly, through whatever path
+    // a match happens to report - so a corrupted truncation (e.g.
+    // truncateSegmentsAt() becoming a no-op, or being called with the wrong
+    // index) could easily go unnoticed if it still happened to leave the
+    // RIGHT segments on top, by coincidence, for every scenario those tests
+    // exercise. Each expectation below was confirmed to actually fail when
+    // truncateSegmentsAt() was temporarily stubbed out.
+    describe('streaming path-segment cache (issue #44) stays correct', () => {
+
+        it('truncates mSegments back to baseline when a sibling key replaces the old one at the same reused slot', () => {
+            const position = new StreamPosition(false /* pathIncludeArrayIndex */);
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+            position.stepIntoObject();
+            position.updateObjectEntry('old');
+            position.stepOutObject();               // slot at index 1 closes
+            position.stepIntoObject();               // reuses that same slot
+            position.updateObjectEntry('new');
+
+            expect(position.path(false)).to.deep.equal(['a', 'new']);
+        });
+
+        it('replaces a still-open object\'s own segment when a second key arrives without any intervening stepOut (e.g. {"a":1,"b":2})', () => {
+            const position = new StreamPosition(false);
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+
+            expect(position.path(false)).to.deep.equal(['a']);
+
+            position.updateObjectEntry('b');         // same object, next key
+
+            expect(position.path(false)).to.deep.equal(['b']);
+        });
+
+        it('drops a closed branch\'s deeper segments on stepOutObject, leaving only the still-open shallower ones', () => {
+            const position = new StreamPosition(false);
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+            position.stepIntoObject();
+            position.updateObjectEntry('b');
+            position.stepIntoObject();
+            position.updateObjectEntry('c');
+
+            expect(position.path(false)).to.deep.equal(['a', 'b', 'c']);
+
+            position.stepOutObject();                // "c" branch closes
+
+            expect(position.path(false)).to.deep.equal(['a', 'b']);
+
+            position.stepOutObject();                // "b" branch closes
+
+            expect(position.path(false)).to.deep.equal(['a']);
+        });
+
+        it('keeps an object\'s own segment intact when a deeper sibling branch that reused a lower slot closes (no cross-slot leakage)', () => {
+            // {"a":{"x":{"p":1},"y":{"q":2}}} - "x" and "y" both open/close a
+            // one-level-deeper slot under "a"; "a" itself must still read
+            // back correctly after each of them is done with that slot.
+            const position = new StreamPosition(false);
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+            position.stepIntoObject();
+            position.updateObjectEntry('x');
+            position.stepIntoObject();
+            position.updateObjectEntry('p');
+            position.stepOutObject();
+            position.stepOutObject();                // back to "a"'s object
+
+            expect(position.path(false)).to.deep.equal(['a']);
+
+            position.stepIntoObject();               // reuses "x"'s old slot
+            position.updateObjectEntry('y');
+            position.stepIntoObject();
+            position.updateObjectEntry('q');
+
+            expect(position.path(false)).to.deep.equal(['a', 'y', 'q']);
+
+            position.stepOutObject();
+            position.stepOutObject();
+
+            expect(position.path(false)).to.deep.equal(['a']);
+        });
+
+        it('replaces the array\'s own contributed index segment on each sibling element, and truncates it away on stepOutArray, when pathIncludeArrayIndex is on', () => {
+            const position = new StreamPosition(true /* pathIncludeArrayIndex */);
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+            position.stepIntoArray();
+            position.increaseArrayIndex();           // element 0
+
+            expect(position.path()).to.deep.equal(['a', 0]);
+
+            position.increaseArrayIndex();           // element 1 (sibling)
+
+            expect(position.path()).to.deep.equal(['a', 1]);
+
+            position.stepOutArray();
+
+            expect(position.path()).to.deep.equal(['a']);
+        });
+
+        it('does not contribute an index segment for a reused array slot when pathIncludeArrayIndex is off', () => {
+            const position = new StreamPosition(false);
+            position.stepIntoObject();
+            position.updateObjectEntry('a');
+            position.stepIntoArray();
+            position.increaseArrayIndex();
+            position.increaseArrayIndex();
+
+            expect(position.path(false)).to.deep.equal(['a']);
+
+            position.stepOutArray();
+
+            expect(position.path(false)).to.deep.equal(['a']);
+        });
+    });
+
     describe('string', () => {
         it('should match on root', () => {
             const root1 = YAJSPath.parse('$');
@@ -939,6 +1118,32 @@ describe('path match', () => {
             const descendant = YAJSPath.parse('$..[key5]child');
 
             expect(descendant.match(childPath)).to.equal(false);
+        });
+    });
+
+    // Mutation-testing gap: `mDefinite`'s initial value (true) is only ever
+    // read as-is for a pattern with NO descendant at all - the constructor's
+    // own loop unconditionally sets it to false the moment it sees one, but
+    // never sets it back to true, so a pattern without '..' relies entirely
+    // on the field's initializer. No existing test asserted on `.definite`/
+    // `.minimumDepth` directly, so flipping that initializer to false
+    // survived even though `.definite` is a real, consumed public property
+    // (StreamContext/FastPathEvaluator gate the ancestor-key cache and the
+    // fast path's depth-based early exit on it - see StreamPosition's field
+    // comment).
+    describe('definite/minimumDepth', () => {
+        it('is definite, with minimumDepth equal to its own depth, for a path with no descendant', () => {
+            const pattern = YAJSPath.parse('$.a.b');
+
+            expect(pattern.definite).to.equal(true);
+            expect(pattern.minimumDepth).to.equal(3); // Root, a, b
+        });
+
+        it('is NOT definite, with minimumDepth counting only the real (non-descendant) operators, once a path contains a descendant', () => {
+            const pattern = YAJSPath.parse('$.a..b');
+
+            expect(pattern.definite).to.equal(false);
+            expect(pattern.minimumDepth).to.equal(3); // Root, a, b - the descendant itself contributes no fixed depth
         });
     });
 

@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.stryker.config.ts"
+  },
+  "reporters": ["progress", "clear-text", "html"],
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/main/lib/path/**/*.ts",
+    "src/main/lib/context/**/*.ts",
+    "!src/main/lib/path/parser/YAJSLexer.ts",
+    "!src/main/lib/path/parser/YAJSParser.ts",
+    "!src/main/lib/path/parser/YAJSVisitor.ts"
+  ],
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "timeoutMS": 15000,
+  "concurrency": 4
+}
