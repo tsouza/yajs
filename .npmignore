@@ -102,6 +102,10 @@ package-lock.json
 # sources (only the compiled dist/ tree ships)
 src
 
+# dev-only differential fuzz/micro-benchmark harness (issue #77) - not part
+# of the published library
+bench-proto
+
 # repo/dev files that have no business in the published tarball
 .gitattributes
 .gitmodules

@@ -104,6 +104,128 @@ describe('chunk boundary handling', () => {
             }
         }
     }, 30000);
+
+    // Regression tests for GitHub issue #77: the STRING1 "fast path" added
+    // to JsonSaxParser batches a run of plain ASCII string content (and,
+    // separately, a run of consecutive digits in NUMBER3/5/8) into a single
+    // materialization call instead of one append per byte - see the inline
+    // comments at each fast path in JsonSaxParser.ts for the exact
+    // correctness argument. Promoted from that issue's differential fuzz
+    // harness (bench-proto/fuzz-diff.js), these are curated, deterministic
+    // cases with independently-known expected values (not "identical to
+    // some baseline build") covering the three places that argument
+    // actually depends on:
+    //  - the `utf8BytesNeeded === 0` entry guard: an ASCII byte arriving
+    //    immediately after an aborted multi-byte UTF-8 lead must still
+    //    route through the incremental decoder (and its U+FFFD
+    //    substitution), not get swept into a batch;
+    //  - the 16-byte slice-vs-fromCharCode-loop materialization threshold,
+    //    at every run length right around it (an off-by-one there would
+    //    only show up as a length/content mismatch, never a crash);
+    //  - the triple-quote-mode scan loop, which duplicates the slow path's
+    //    acceptance set in scan-loop form - a place the two could
+    //    independently drift (called out as a risk in issue #77 itself).
+    describe('tokenizer fast-path span-slicing (issue #77)', () => {
+
+        it('materializes an ASCII string run correctly at every length around the 16-byte slice threshold', async () => {
+            for (const len of [1, 2, 15, 16, 17, 18, 32, 33, 100]) {
+                const expected = 'abcdefghij'.repeat(Math.ceil(len / 10)).slice(0, len);
+                const doc = Buffer.from(`["${expected}"]`);
+                for (let i = 1; i < doc.length; i++) {
+                    const result = await run('$', [doc.subarray(0, i), doc.subarray(i)]);
+                    expect(result, `len=${len} split@${i}/${doc.length}`).to.have.lengthOf(1);
+                    expect(result[0].value, `len=${len} split@${i}/${doc.length}`).to.equal(expected);
+                }
+            }
+        }, 30000);
+
+        it('materializes a triple-quoted-string ASCII run correctly at every length around the 16-byte slice threshold', async () => {
+            for (const len of [1, 15, 16, 17, 32, 33]) {
+                const expected = 'abcdefghij'.repeat(Math.ceil(len / 10)).slice(0, len);
+                const doc = Buffer.from(`["""${expected}"""]`);
+                for (let i = 1; i < doc.length; i++) {
+                    const result = await run('$', [doc.subarray(0, i), doc.subarray(i)]);
+                    expect(result, `len=${len} split@${i}/${doc.length}`).to.have.lengthOf(1);
+                    expect(result[0].value, `len=${len} split@${i}/${doc.length}`).to.equal(expected);
+                }
+            }
+        }, 30000);
+
+        it('materializes a digit run correctly at every length around the 16-byte slice threshold, in every number state', async () => {
+            const literals = [
+                '1' + '2'.repeat(14),          // NUMBER3 (integer part): 15 digits
+                '1' + '2'.repeat(15),          // NUMBER3: 16 digits
+                '1' + '2'.repeat(16),          // NUMBER3: 17 digits
+                '1.' + '3'.repeat(15) + '4',   // NUMBER5 (fraction): 16 digits
+                '1.' + '3'.repeat(16) + '4',   // NUMBER5: 17 digits
+                '1e+' + '0'.repeat(14) + '5',  // NUMBER8 (exponent): 15 digits, value 1e5
+                '1e+' + '0'.repeat(15) + '5',  // NUMBER8: 16 digits, value 1e5
+            ];
+            for (const literal of literals) {
+                const expected = Number(literal);
+                const doc = Buffer.from(`[${literal}]`);
+                for (let i = 1; i < doc.length; i++) {
+                    const result = await run('$', [doc.subarray(0, i), doc.subarray(i)]);
+                    expect(result, `${literal} split@${i}/${doc.length}`).to.have.lengthOf(1);
+                    expect(Object.is(result[0].value, expected),
+                        `${literal} split@${i}/${doc.length}: got ${result[0].value}`).to.be.true;
+                }
+            }
+        }, 30000);
+
+        it('routes an ASCII byte through the incremental UTF-8 decoder (one U+FFFD) instead of the fast path when it arrives immediately after an aborted multi-byte lead', async () => {
+            const cases: Array<[string, Buffer, string]> = [
+                ['aborted 2-byte lead, short trailing run',
+                    Buffer.concat([Buffer.from([0x22, 0xc3]), Buffer.from('ab'), Buffer.from([0x22])]),
+                    '�ab'],
+                ['aborted 2-byte lead, long trailing run (crosses the slice threshold)',
+                    Buffer.concat([Buffer.from([0x22, 0xc3]), Buffer.from('abcdefghijklmnopqrstuvwxyz'), Buffer.from([0x22])]),
+                    '�abcdefghijklmnopqrstuvwxyz'],
+                ['aborted 3-byte lead (1 of 2 continuation bytes consumed)',
+                    Buffer.concat([Buffer.from([0x22, 0xe2, 0x82]), Buffer.from('abcdefghijklmnopqrstuvwxyz'), Buffer.from([0x22])]),
+                    '�abcdefghijklmnopqrstuvwxyz'],
+                ['aborted 4-byte lead (2 of 3 continuation bytes consumed)',
+                    Buffer.concat([Buffer.from([0x22, 0xf0, 0x9f, 0x98]), Buffer.from('abcdefghijklmnopqrstuvwxyz'), Buffer.from([0x22])]),
+                    '�abcdefghijklmnopqrstuvwxyz'],
+            ];
+            for (const [label, doc, expected] of cases) {
+                for (let i = 1; i < doc.length; i++) {
+                    const result = await run('$', [doc.subarray(0, i), doc.subarray(i)]);
+                    expect(result, `${label} split@${i}/${doc.length}`).to.have.lengthOf(1);
+                    expect(result[0].value, `${label} split@${i}/${doc.length}`).to.equal(expected);
+                }
+            }
+        }, 30000);
+
+        it('preserves triple-quote-mode literal semantics (backslash, embedded single quote, CRLF) across a run that crosses the 16-byte slice threshold', async () => {
+            const cases: Array<[string, string]> = [
+                // Backslash is a literal character in tdq mode, not an escape
+                // introducer - the non-tdq scan loop breaks a run on 0x5c,
+                // the tdq one does not (see the two loop bodies in the
+                // STRING1 fast path).
+                ['backslash-heavy', 'a\\b'.repeat(10)],
+                // A single embedded `"` (not a full closing `"""`) must
+                // still terminate a fast-path run (excluded by the entry
+                // guard: `n !== 0x22`) and fall through to the ordinary
+                // TDQSTR3-5 lookahead, then resume batching right after it.
+                ['embedded single quote', 'a"b'.repeat(10)],
+                // CR/LF are literal content bytes in tdq mode (the STRING1
+                // switch's final check treats them like any other byte
+                // `>= 0x20` when `this.tdq`), and the tdq scan loop's own
+                // break condition explicitly excludes them from ending a
+                // run - unlike a bare string, where they're always illegal.
+                ['embedded CRLF', 'line\r\n'.repeat(6)],
+            ];
+            for (const [label, expected] of cases) {
+                const doc = Buffer.from(`["""${expected}"""]`, 'binary');
+                for (let i = 1; i < doc.length; i++) {
+                    const result = await run('$', [doc.subarray(0, i), doc.subarray(i)]);
+                    expect(result, `${label} split@${i}/${doc.length}`).to.have.lengthOf(1);
+                    expect(result[0].value, `${label} split@${i}/${doc.length}`).to.equal(expected);
+                }
+            }
+        }, 30000);
+    });
 });
 
 // Feeds `chunks` to a fresh yajs() stream as separate write() calls - so the
