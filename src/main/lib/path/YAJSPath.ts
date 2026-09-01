@@ -409,6 +409,17 @@ export class YAJSPath {
         return this.size;
     }
 
+    // The compiled operator stack (Root, followed by each parsed step),
+    // exposed read-only for callers that need to inspect a selector's shape
+    // without reimplementing the parser - namely the NDJSON fast path's
+    // chain compiler (src/main/lib/fastpath/FastPathEvaluator.ts), which
+    // needs to recognize "definite pure-key chain" selectors ($.a.b.c, no
+    // wildcards/descendants/filters) to pick its specialized evaluator.
+    // Returns the live internal array - treat it as read-only.
+    operators(): PathOperator[] {
+        return this.stack;
+    }
+
     path(includeArrayIndex): string[] {
         const result = [];
         for (let i = 0; i < this.size; i++) {

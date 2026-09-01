@@ -97,6 +97,30 @@ export class StreamPosition extends YAJSPath {
         this.trackAncestorKeys = trackAncestorKeys;
     }
 
+    // Returns this position to its just-constructed state so StreamContext
+    // can reuse one instance across successive top-level documents instead
+    // of allocating a fresh StreamPosition (plus its Stack/Root/Map/array
+    // baggage) per document - for NDJSON that's one full construction per
+    // record. Only ever called on a position already back at bare root
+    // (peek() is ROOT, which can only be index 0, so pathDepth() is 1 -
+    // both call sites in StreamContext gate on exactly that), which means:
+    //  - the operator stack is already [Root] (size 1); the slots ABOVE
+    //    size are deliberately kept, so stepInto()'s slot-reuse now works
+    //    across documents too (each reuse resets key/index itself);
+    //  - mSegments was already truncated empty by the final stepOut, and
+    //    the ancestor-key caches were already retired entry-by-entry by
+    //    pop() (they are only ever populated for still-open slots);
+    // so all that genuinely needs resetting is the root/array bookkeeping
+    // that pop() leaves behind (see pop(): popping back to depth 1 does
+    // NOT restore hasOnlyArrayIndex when rootIndex is 0), plus a
+    // defensive truncation of mSegments.
+    reinitialize(): void {
+        this.rootIndex = 0;
+        this.hasOnlyArrayIndex = true;
+        this.arrayIndexDepth = undefined;
+        this.mSegments.length = 0;
+    }
+
     // Depth (this.pathDepth(), taken right before the push) of the
     // innermost array currently establishing "hasOnlyArrayIndex" mode -
     // i.e. the array whose immediate elements should each be evaluated as

@@ -240,9 +240,11 @@ $ echo '{"a":{"key1":1,"key2":2,"key3":3}}' | yajs '$.a<key1 key3>'
 `yajs(path, options)` accepts an options object as its second argument
 (exported to TypeScript consumers as the `YAJSOptions` interface):
 
-Option                  | Type    | Default | Description
-------------------------|---------|---------|------------
-`pathIncludeArrayIndex` | boolean | `false` | Include array indices (as numbers) in each emitted chunk's `path`
+Option                    | Type    | Default | Description
+--------------------------|---------|---------|------------
+`pathIncludeArrayIndex`   | boolean | `false` | Include array indices (as numbers) in each emitted chunk's `path`
+`fastPath`                | boolean | `false` | Opt-in NDJSON fast path — see [NDJSON fast path](#ndjson-fast-path-opt-in) below
+`fastPathMaxRecordBytes`  | number  | `8388608` (8 MiB) | Per-record size cutoff for `fastPath` — see below
 
 ```js
 const yajs = require('yajson-stream');
@@ -256,6 +258,61 @@ stream.end();
 //   [ 'a', 1, 'b' ] 2
 // (without the option, both paths would be [ 'a', 'b' ])
 ```
+
+## NDJSON fast path (opt-in)
+
+For NDJSON-shaped input (one JSON value per line — YAJS's primary use case),
+`{ fastPath: true }` bypasses the byte-by-byte SAX tokenizer: each line is
+handed to native `JSON.parse`, then walked directly against your selector,
+instead of being tokenized one character at a time. Measured **~5x**
+end-to-end throughput improvement for the common case of a definite key-chain
+selector (e.g. `$.field2.nested`) against NDJSON input — see
+[issue #78](https://github.com/tsouza/yajs/issues/78) for the full
+investigation and measured numbers.
+
+```js
+const stream = yajs('$.field2.nested', { fastPath: true });
+```
+
+It is **off by default** and **not auto-detected** — enable it only for input
+you know is NDJSON-shaped (whitespace/newline-separated top-level JSON
+values). This is a newer, less battle-tested code path than the default
+engine, so it stays fully opt-in rather than replacing the default.
+
+**It never sacrifices correctness for speed.** Anything one `JSON.parse` call
+per line can't handle on its own — a malformed line, a record pretty-printed
+across multiple physical lines, the `"""` triple-quote extension, multiple
+values on one line, or a record larger than `fastPathMaxRecordBytes` (default
+8 MiB, to bound memory on an oversized record) — falls back to the exact same
+streaming engine `fastPath: false` uses, including issue #50's per-record
+error-and-resync behavior. Only that one record pays the slower cost; the
+fast path resumes normally for the records after it.
+
+### Two accepted differences from the default engine
+
+Both are inherent to using `JSON.parse` under the hood, not implementation
+bugs, and only matter if your data can actually contain them:
+
+1. **Duplicate object keys.** The default engine emits one match per
+   occurrence of a duplicated key; `fastPath` (via `JSON.parse`) keeps only
+   the last occurrence.
+2. **Integer-like key emission order.** `JSON.parse`'s objects always
+   enumerate integer-like keys first, in ascending order, ahead of string
+   keys — regardless of their order in the source text (this is standard
+   JavaScript object key semantics, not a YAJS quirk). When an object's raw
+   text key order differs from that enumeration order, `fastPath` emits that
+   object's sibling matches in the *enumeration* order instead of the raw
+   text order. Values and paths are unaffected — only the order matches
+   arrive in can differ.
+
+### What's deferred
+
+Per issue #78's own recommended build order, this ships only the
+"line/chain fast path" — the array splitter (treating a top-level/nested JSON
+array as comma-delimited "NDJSON") and the full span-parsing hybrid engine
+(which also solves the "one huge record in an otherwise-small-record stream"
+memory case more directly) are deferred to future work — see the issue for
+details.
 
 ## Non-standard extensions
 

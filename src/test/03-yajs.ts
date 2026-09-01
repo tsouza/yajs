@@ -925,6 +925,122 @@ describe('yajs', () => {
             }));
     });
 
+    // Regression tests for GitHub issue #76 / PR #81: StreamContext now
+    // reuses a single StreamPosition instance across successive NDJSON
+    // records (StreamPosition.reinitialize(), invoked from
+    // StreamContext.freshPosition()) instead of allocating a fresh one per
+    // record, on the invariant that reinitialize() only ever runs when the
+    // position is genuinely back at bare root (position undefined, or
+    // peek().getType() === ROOT - see freshPosition()'s call sites). These
+    // cases are deliberately adversarial toward that invariant: consecutive
+    // records with very different root types, or key/index structure at the
+    // SAME position-stack depth, so any leftover state from a completed
+    // record (StreamPosition's hasOnlyArrayIndex/rootIndex/arrayIndexDepth,
+    // or its mAncestorKeys/mKeyDepthStacks/mSegments incremental caches)
+    // would have somewhere to visibly corrupt the next record's matching.
+    describe('StreamPosition reuse does not leak state across NDJSON records (issue #76)', () => {
+
+        // hasOnlyArrayIndex is set false the moment any object-container
+        // operator is pushed (StreamPosition.push()), and - unlike the
+        // array case - popping back out of a plain top-level object leaves
+        // rootIndex at its untouched default (0), so pop()'s own
+        // `pathDepth <= rootIndex` restoration (1 <= 0) never fires to flip
+        // it back to true - only reinitialize()'s explicit reset does. Its
+        // sole reader is isInRoot(), consulted only from onValue() for a
+        // scalar. Verified BY MUTATION (temporarily dropping this specific
+        // reset and differential-fuzzing 24000 NDJSON-stream/selector cases
+        // against the real build) that this reset is currently behaviorally
+        // inert: onValue()'s isInRoot()-false branch already reaches the
+        // identical match() call via doOnValue()'s own independent
+        // peek().getType()!==ROOT check whenever position is defined - i.e.
+        // exactly the reused-position (2nd+ NDJSON record) case this reset
+        // exists for. Kept as a regression guard on the OBSERVABLE behavior
+        // (root array flattening, issue #14) regardless - defensively
+        // correct, and would start mattering again if onValue()'s branching
+        // is ever refactored to rely on isInRoot() more directly.
+        it('streams a root array\'s elements individually even immediately after a root object record', () =>
+            testJson('{"a":1}\n[10,20,30]', '$').then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: [], value: { a: 1 } },
+                    { path: [], value: 10 },
+                    { path: [], value: 20 },
+                    { path: [], value: 30 },
+                ]);
+            }));
+
+        it('handles alternating root object/array/scalar NDJSON records without state leaking between them', () =>
+            testJson('[1,2]\n{"b":2}\n[3,4]\n5\n{"c":{"d":6}}', '$').then((array) => {
+                expect(array.map((e) => e.value)).to.deep.equal([1, 2, { b: 2 }, 3, 4, 5, { c: { d: 6 } }]);
+            }));
+
+        // Exercises StreamPosition.trackAncestorKeys's incremental
+        // mAncestorKeys/mKeyDepthStacks cache (backing nearestAncestorIndex(),
+        // only maintained for a '..'-containing path) across three records
+        // whose "a" keys sit at different depths and different roles.
+        // Record 1 is the exact issue #45 backtracking repro (03-yajs.ts's
+        // "descendant backtracking" describe above - matches via the OUTER
+        // "a", not the nearer inner one). Record 2 is the exact issue #45
+        // "no direct-child a" repro (must be zero matches, not a stale hit
+        // inherited from record 1's cached ancestor). Record 3 has "a" as a
+        // direct child again, at the identical position-stack index record
+        // 1's OUTER "a" occupied, but with unrelated nested content.
+        it('does not let one record\'s ancestor-key cache answer a ".." lookup for a later, differently-shaped record', () =>
+            testJson('{"a":{"c":{"a":{"x":1}}}}\n{"c":{"a":{"x":2}}}\n{"a":{"z":{"x":3}}}', '$.a..x').
+                then((array) => {
+                    expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                        { path: ['a', 'c', 'a', 'x'], value: 1 },
+                        { path: ['a', 'z', 'x'], value: 3 },
+                    ]);
+                }));
+
+        // Exercises StreamPosition.pathIncludeArrayIndex's mSegments/
+        // mSegmentBaseline cache: record 1 puts an ArrayIndex operator at
+        // position-stack index 2 (contributing a numeric segment); record 2
+        // puts a plain ChildNode at that exact same index (contributing a
+        // string segment instead). A stale segment/baseline surviving reuse
+        // would show up as a wrong-shaped path for record 2.
+        it('keeps pathIncludeArrayIndex path segments from one NDJSON record out of the next, even at identical stack depths', () =>
+            testJson('{"a":[{"x":1},{"x":2}]}\n{"a":{"b":{"x":3}}}', '$..x', true).then((array) => {
+                expect(array.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal([
+                    { path: ['a', 0, 'x'], value: 1 },
+                    { path: ['a', 1, 'x'], value: 2 },
+                    { path: ['a', 'b', 'x'], value: 3 },
+                ]);
+            }));
+
+        // Cross-checks a fused NDJSON stream's output against each record
+        // processed in complete isolation (its own fresh yajs() call) - the
+        // strongest form of "no leakage" property, independent of any
+        // hand-computed expectation: if StreamPosition reuse leaks ANYTHING
+        // across records, the combined run's output must differ from the
+        // concatenation of the isolated runs for at least one selector.
+        const RECORDS = [
+            '{"a":{"b":{"c":1}}}',
+            '{"x":[{"a":1},{"a":{"a":2}}]}',
+            '[1,[2,3],{"a":4}]',
+            '{"a":1}',
+            '{"q":{"a":{"r":{"a":5}}}}',
+            '5',
+            '{"a":{"x":{"a":{"x":6}}}}',
+        ];
+        const SELECTORS: Array<[string, boolean]> = [
+            ['$..a', false], ['$.a..x', false], ['$..*', false], ['$', true],
+        ];
+
+        SELECTORS.forEach(([selector, includeIdx]) => {
+            it(`matches the isolated per-record baseline exactly for selector "${selector}" ` +
+                `(pathIncludeArrayIndex=${includeIdx})`, async () => {
+                const isolated: any[] = [];
+                for (const record of RECORDS) {
+                    const r = await testJson(record, selector, includeIdx);
+                    isolated.push(...r.map((e) => ({ path: e.path, value: e.value })));
+                }
+                const combined = await testJson(RECORDS.join('\n'), selector, includeIdx);
+                expect(combined.map((e) => ({ path: e.path, value: e.value }))).to.deep.equal(isolated);
+            });
+        });
+    });
+
     // Regression tests for GitHub issue #39: '$.*..*' silently stopped one
     // hop short of where '$.a..*' and '$..*..*' both correctly reach on the
     // identical document shape - see 02-path.ts's "descendant reaches
