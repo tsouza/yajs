@@ -1,0 +1,743 @@
+Statistical profiling result from isolate-0x1bd8d000-2870177-v8.log, (16812 ticks, 5394 unaccounted, 0 excluded).
+
+ [Shared libraries]:
+   ticks  total  nonlib   name
+    272    1.6%          /usr/lib/x86_64-linux-gnu/libc.so.6
+      4    0.0%          /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+
+ [JavaScript]:
+   ticks  total  nonlib   name
+   2612   15.5%   15.8%  JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    782    4.7%    4.7%  Builtin: StringAdd_CheckNone
+    777    4.6%    4.7%  Builtin: RecordWriteSaveFP
+    700    4.2%    4.2%  JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+    683    4.1%    4.1%  JS: *match /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:269:10
+    547    3.3%    3.3%  JS: *endObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:119:14
+    394    2.3%    2.4%  JS: *matchFrom /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:96:14
+    344    2.0%    2.1%  JS: *onValue /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:197:12
+    290    1.7%    1.8%  JS: *push /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:121:9
+    285    1.7%    1.7%  JS: *onColon /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:106:18
+    232    1.4%    1.4%  Builtin: GrowFastSmiOrObjectElements
+    228    1.4%    1.4%  JS: *StreamPosition /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:9:16
+    204    1.2%    1.2%  Builtin: StoreIC
+    170    1.0%    1.0%  Builtin: KeyedLoadIC_Megamorphic
+    164    1.0%    1.0%  JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/dispatcher/AbstractObjectBuilder.js:17:16
+    150    0.9%    0.9%  Builtin: StrictEqual
+    138    0.8%    0.8%  Builtin: StringEqual
+    134    0.8%    0.8%  JS: *startArray /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:145:15
+    132    0.8%    0.8%  Builtin: JSConstructStubGeneric
+    115    0.7%    0.7%  Builtin: CreateObjectWithoutProperties
+    113    0.7%    0.7%  Builtin: CloneFastJSArray
+    101    0.6%    0.6%  JS: *AbstractFilteredOperator /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/operator/AbstractFilteredOperator.js:7:16
+     91    0.5%    0.6%  Builtin: KeyedLoadIC_PolymorphicName
+     86    0.5%    0.5%  Builtin: FastNewObject
+     84    0.5%    0.5%  JS: *emit node:events:455:44
+     69    0.4%    0.4%  JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+     65    0.4%    0.4%  JS: *endArray /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:185:13
+     64    0.4%    0.4%  Builtin: CEntry_Return1_ArgvOnStack_NoBuiltinExit
+     58    0.3%    0.4%  Builtin: ArrayPrototypeShift
+     57    0.3%    0.3%  Builtin: MapConstructor
+     46    0.3%    0.3%  JS: *enterValue /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:222:15
+     43    0.3%    0.3%  Builtin: CallFunction_ReceiverIsAny
+     41    0.2%    0.2%  Builtin: KeyedLoadIC
+     38    0.2%    0.2%  Builtin: CEntry_Return1_ArgvOnStack_BuiltinExit
+     32    0.2%    0.2%  JS: *popContainer /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:248:17
+     31    0.2%    0.2%  Builtin: KeyedLoadICTrampoline_Megamorphic
+     30    0.2%    0.2%  JS: *startObjectEntry /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:131:21
+     30    0.2%    0.2%  Builtin: JSBuiltinsConstructStub
+     28    0.2%    0.2%  JS: *requireValuePosition /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:209:25
+     27    0.2%    0.2%  Builtin: CallWithArrayLike
+     24    0.1%    0.1%  Builtin: NewRestArgumentsElements
+     19    0.1%    0.1%  Builtin: CallVarargs
+     19    0.1%    0.1%  Builtin: ArrayPrototypeConcat
+     15    0.1%    0.1%  JS: *peek /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/dispatcher/AbstractObjectBuilder.js:45:9
+     15    0.1%    0.1%  Builtin: KeyedLoadICTrampoline
+     15    0.1%    0.1%  Builtin: AdaptorWithBuiltinExitFrame0
+     14    0.1%    0.1%  JS: *<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/wasm-experiment/e2e.js:17:16
+     14    0.1%    0.1%  Builtin: Call_ReceiverIsAny
+     13    0.1%    0.1%  JS: *pushContainer /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:240:18
+     13    0.1%    0.1%  Builtin: LoadIC
+     12    0.1%    0.1%  JS: +parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     12    0.1%    0.1%  JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/BitSet.js:1:1
+     10    0.1%    0.1%  JS: *tryComma /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:271:13
+      9    0.1%    0.1%  Builtin: FastNewClosure
+      7    0.0%    0.0%  Builtin: InterpreterEntryTrampoline
+      6    0.0%    0.0%  Builtin: CallFunction_ReceiverIsNullOrUndefined
+      6    0.0%    0.0%  Builtin: CallFunction_ReceiverIsNotNullOrUndefined
+      5    0.0%    0.0%  JS: +isEmpty /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/lodash/lodash.js:11578:21
+      5    0.0%    0.0%  JS: *isEmpty /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/lodash/lodash.js:11578:21
+      5    0.0%    0.0%  Builtin: BaselineOutOfLinePrologue
+      4    0.0%    0.0%  JS: +YAJSPath /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:17:16
+      4    0.0%    0.0%  JS: *expectingValue /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:191:19
+      4    0.0%    0.0%  JS: *appendUtf8Byte /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:999:19
+      4    0.0%    0.0%  Builtin: LessThan_Baseline
+      4    0.0%    0.0%  Builtin: Call_ReceiverIsNullOrUndefined
+      4    0.0%    0.0%  Builtin: ArrayShift
+      3    0.0%    0.0%  JS: +emit node:events:455:44
+      3    0.0%    0.0%  JS: *get size /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:38:13
+      3    0.0%    0.0%  JS: *flushPendingString /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:95:32
+      3    0.0%    0.0%  Builtin: StringPrototypeSlice
+      3    0.0%    0.0%  Builtin: Call_ReceiverIsNotNullOrUndefined
+      3    0.0%    0.0%  Builtin: BaselineLeaveFrame
+      3    0.0%    0.0%  Builtin: ArrayConcat
+      2    0.0%    0.0%  JS: ^processTicksAndRejections node:internal/process/task_queues:71:35
+      2    0.0%    0.0%  JS: +stream.queue.stream.push /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:40:41
+      2    0.0%    0.0%  JS: +stepIntoObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:20:19
+      2    0.0%    0.0%  JS: +push /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:121:9
+      2    0.0%    0.0%  JS: +matchFrom /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:96:14
+      2    0.0%    0.0%  JS: +match /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:68:10
+      2    0.0%    0.0%  JS: +match /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:269:10
+      2    0.0%    0.0%  JS: +ChildNode /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/operator/ChildNode.js:7:16
+      2    0.0%    0.0%  JS: *onValueBoundary /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:179:26
+      2    0.0%    0.0%  Builtin: ToInteger
+      2    0.0%    0.0%  Builtin: StrictEqual_WithFeedback
+      2    0.0%    0.0%  Builtin: StrictEqual_Baseline
+      2    0.0%    0.0%  Builtin: RecordWriteIgnoreFP
+      2    0.0%    0.0%  Builtin: KeyedHasIC_PolymorphicName
+      2    0.0%    0.0%  Builtin: Increment_Baseline
+      2    0.0%    0.0%  Builtin: FindNonDefaultConstructorOrConstruct
+      2    0.0%    0.0%  Builtin: Construct_Baseline
+      2    0.0%    0.0%  Builtin: Call_ReceiverIsNullOrUndefined_Baseline_Compact
+      2    0.0%    0.0%  Builtin: ArrayPrototypePush
+      2    0.0%    0.0%  Builtin: AllocateInYoungGeneration
+      1    0.0%    0.0%  JS: ~toCharArray /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/Utils.js:139:21
+      1    0.0%    0.0%  JS: ~stripLeadingBom /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:290:20
+      1    0.0%    0.0%  JS: ~onStartObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:153:24
+      1    0.0%    0.0%  JS: ~howMuchToRead node:internal/streams/readable:628:23
+      1    0.0%    0.0%  JS: ~__decorate /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/Interval.js:6:56
+      1    0.0%    0.0%  JS: ~__decorate /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/Array2DHashSet.js:6:56
+      1    0.0%    0.0%  JS: ~__decorate /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/DefaultErrorStrategy.js:6:56
+      1    0.0%    0.0%  JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/BitSet.js:1:1
+      1    0.0%    0.0%  JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/atn/LexerPushModeAction.js:13:21
+      1    0.0%    0.0%  JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/atn/ATNDeserializationOptions.js:1:1
+      1    0.0%    0.0%  JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:1:1
+      1    0.0%    0.0%  JS: ^update /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/MurmurHash.js:31:20
+      1    0.0%    0.0%  JS: ^processPromiseRejections node:internal/process/promises:439:34
+      1    0.0%    0.0%  JS: ^popAsyncContext node:internal/async_hooks:561:25
+      1    0.0%    0.0%  JS: ^parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      1    0.0%    0.0%  JS: ^normalize node:path:1293:12
+      1    0.0%    0.0%  JS: ^closure /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/atn/LexerATNSimulator.js:314:12
+      1    0.0%    0.0%  JS: ^canPushMore node:internal/streams/readable:540:21
+      1    0.0%    0.0%  JS: ^canCloseArray /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:262:18
+      1    0.0%    0.0%  JS: ^addCatch node:events:355:18
+      1    0.0%    0.0%  JS: ^ReadStream._read node:internal/fs/streams:251:38
+      1    0.0%    0.0%  JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/BitSet.js:1:1
+      1    0.0%    0.0%  JS: +wrappedFn node:internal/errors:537:21
+      1    0.0%    0.0%  JS: +stepIntoArray /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:87:18
+      1    0.0%    0.0%  JS: +startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/dispatcher/AbstractObjectBuilder.js:17:16
+      1    0.0%    0.0%  JS: +requireValuePosition /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:209:25
+      1    0.0%    0.0%  JS: +realpathSync node:fs:2712:22
+      1    0.0%    0.0%  JS: +read node:fs:602:14
+      1    0.0%    0.0%  JS: +pushContainer /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:240:18
+      1    0.0%    0.0%  JS: +pushAsyncContext node:internal/async_hooks:547:26
+      1    0.0%    0.0%  JS: +pop /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:143:8
+      1    0.0%    0.0%  JS: +peek /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:50:9
+      1    0.0%    0.0%  JS: +onValueBoundary /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:179:26
+      1    0.0%    0.0%  JS: +isEmpty node:internal/fixed_queue:96:10
+      1    0.0%    0.0%  JS: +getType /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/operator/ChildNode.js:14:12
+      1    0.0%    0.0%  JS: +get node:internal/streams/readable:1526:8
+      1    0.0%    0.0%  JS: +endObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:119:14
+      1    0.0%    0.0%  JS: +addChunk node:internal/streams/readable:548:18
+      1    0.0%    0.0%  JS: +StreamPosition /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:9:16
+      1    0.0%    0.0%  JS: +Readable.read node:internal/streams/readable:645:35
+      1    0.0%    0.0%  JS: +PathParent /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/PathParent.js:5:16
+      1    0.0%    0.0%  JS: +<anonymous> node:internal/modules/cjs/loader:873:37
+      1    0.0%    0.0%  JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      1    0.0%    0.0%  JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:267:21
+      1    0.0%    0.0%  JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:114:23
+      1    0.0%    0.0%  JS: *updateObjectEntry /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:52:22
+      1    0.0%    0.0%  JS: *pop /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:143:8
+      1    0.0%    0.0%  JS: *onString /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:157:19
+      1    0.0%    0.0%  JS: *getType /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/operator/Root.js:6:12
+      1    0.0%    0.0%  JS: *getType /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/operator/ArrayIndex.js:10:12
+      1    0.0%    0.0%  JS: *get stack /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:47:14
+      1    0.0%    0.0%  JS: *YAJSPath /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:17:16
+      1    0.0%    0.0%  JS: *<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/antlr4ts/misc/BitSet.js:1:1
+      1    0.0%    0.0%  JS: *<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:267:21
+      1    0.0%    0.0%  Builtin: ToName
+      1    0.0%    0.0%  Builtin: StringSubstring
+      1    0.0%    0.0%  Builtin: StringPrototypeCharCodeAt
+      1    0.0%    0.0%  Builtin: StoreICTrampoline
+      1    0.0%    0.0%  Builtin: StoreFastElementIC_NoTransitionGrowAndHandleCOW
+      1    0.0%    0.0%  Builtin: StoreFastElementIC_InBounds
+      1    0.0%    0.0%  Builtin: ObjectPrototypeHasOwnProperty
+      1    0.0%    0.0%  Builtin: ObjectCreate
+      1    0.0%    0.0%  Builtin: NewStrictArgumentsElements
+      1    0.0%    0.0%  Builtin: LoadIC_Noninlined
+      1    0.0%    0.0%  Builtin: LoadIC_NoFeedback
+      1    0.0%    0.0%  Builtin: KeyedStoreIC
+      1    0.0%    0.0%  Builtin: KeyedHasIC
+      1    0.0%    0.0%  Builtin: GetProperty
+      1    0.0%    0.0%  Builtin: FastNewFunctionContextFunction
+      1    0.0%    0.0%  Builtin: CreateTypedArray
+      1    0.0%    0.0%  Builtin: CreateShallowObjectLiteral
+      1    0.0%    0.0%  Builtin: CreateEmptyLiteralObject
+      1    0.0%    0.0%  Builtin: ConstructFunction
+      1    0.0%    0.0%  Builtin: Construct
+      1    0.0%    0.0%  Builtin: CallForwardVarargs
+      1    0.0%    0.0%  Builtin: ArrayPrototypeJoin
+
+ [C++]:
+   ticks  total  nonlib   name
+    150    0.9%    0.9%  pthread_cond_signal@@GLIBC_2.3.2
+    100    0.6%    0.6%  fputc@@GLIBC_2.2.5
+     47    0.3%    0.3%  epoll_pwait@@GLIBC_2.6
+     39    0.2%    0.2%  syscall@@GLIBC_2.2.5
+     36    0.2%    0.2%  __write@@GLIBC_2.2.5
+     35    0.2%    0.2%  std::ostream::put(char)@@GLIBCXX_3.4
+     23    0.1%    0.1%  std::ostream::sentry::sentry(std::ostream&)@@GLIBCXX_3.4
+     16    0.1%    0.1%  _init
+     16    0.1%    0.1%  __libc_malloc@@GLIBC_2.2.5
+     12    0.1%    0.1%  isprint@@GLIBC_2.2.5
+      5    0.0%    0.0%  fwrite@@GLIBC_2.2.5
+      5    0.0%    0.0%  cfree@GLIBC_2.2.5
+      5    0.0%    0.0%  __read@@GLIBC_2.2.5
+      4    0.0%    0.0%  std::basic_ostream<char, std::char_traits<char> >& std::__ostream_insert<char, std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*, long)@@GLIBCXX_3.4.9
+      4    0.0%    0.0%  _IO_file_xsputn@@GLIBC_2.2.5
+      3    0.0%    0.0%  std::ostream& std::ostream::_M_insert<long>(long)@@GLIBCXX_3.4.9
+      2    0.0%    0.0%  std::ostreambuf_iterator<char, std::char_traits<char> > std::num_put<char, std::ostreambuf_iterator<char, std::char_traits<char> > >::_M_insert_int<long>(std::ostreambuf_iterator<char, std::char_traits<char> >, std::ios_base&, char, long) const@@GLIBCXX_3.4
+      2    0.0%    0.0%  std::ostream::operator<<(int)@@GLIBCXX_3.4
+      2    0.0%    0.0%  operator new(unsigned long)@@GLIBCXX_3.4
+      2    0.0%    0.0%  node::AsyncWrap::EmitAfter(node::Environment*, double)
+      2    0.0%    0.0%  __munmap@@GLIBC_PRIVATE
+      1    0.0%    0.0%  std::ostreambuf_iterator<char, std::char_traits<char> > std::num_put<char, std::ostreambuf_iterator<char, std::char_traits<char> > >::_M_insert_int<unsigned long>(std::ostreambuf_iterator<char, std::char_traits<char> >, std::ios_base&, char, unsigned long) const@@GLIBCXX_3.4
+      1    0.0%    0.0%  std::__detail::_Prime_rehash_policy::_M_next_bkt(unsigned long) const@@GLIBCXX_3.4.18
+      1    0.0%    0.0%  operator new[](unsigned long)@@GLIBCXX_3.4
+      1    0.0%    0.0%  operator delete(void*, unsigned long)@@CXXABI_1.3.9
+      1    0.0%    0.0%  operator delete(void*)@@GLIBCXX_3.4
+      1    0.0%    0.0%  node::InternalMakeCallback(node::Environment*, v8::Local<v8::Object>, v8::Local<v8::Object>, v8::Local<v8::Function>, int, v8::Local<v8::Value>*, node::async_context, v8::Local<v8::Value>)
+      1    0.0%    0.0%  node::BaseObject::pointer_data()
+      1    0.0%    0.0%  node::AsyncWrap::EmitTraceEventDestroy()
+      1    0.0%    0.0%  node::AsyncWrap::EmitTraceEventBefore()
+      1    0.0%    0.0%  absl::Mutex::UnlockSlow(absl::SynchWaitParams*)
+      1    0.0%    0.0%  __vsnprintf@@GLIBC_2.2.5
+      1    0.0%    0.0%  __pthread_once@GLIBC_2.2.5
+      1    0.0%    0.0%  __pthread_mutex_lock@GLIBC_2.2.5
+      1    0.0%    0.0%  __open@@GLIBC_2.2.5
+      1    0.0%    0.0%  __mmap@@GLIBC_PRIVATE
+      1    0.0%    0.0%  __errno_location@@GLIBC_2.2.5
+      1    0.0%    0.0%  __clock_gettime@@GLIBC_PRIVATE
+
+ [Summary]:
+   ticks  total  nonlib   name
+  10614   63.1%   64.2%  JavaScript
+    527    3.1%    3.2%  C++
+    466    2.8%    2.8%  GC
+    276    1.6%          Shared libraries
+   5394   32.1%          Unaccounted
+
+ [C++ entry points]:
+   ticks    cpp   total   name
+     98   28.8%    0.6%  fputc@@GLIBC_2.2.5
+     70   20.6%    0.4%  pthread_cond_signal@@GLIBC_2.3.2
+     35   10.3%    0.2%  std::ostream::put(char)@@GLIBCXX_3.4
+     29    8.5%    0.2%  __write@@GLIBC_2.2.5
+     23    6.8%    0.1%  syscall@@GLIBC_2.2.5
+     22    6.5%    0.1%  std::ostream::sentry::sentry(std::ostream&)@@GLIBCXX_3.4
+     15    4.4%    0.1%  _init
+     12    3.5%    0.1%  isprint@@GLIBC_2.2.5
+      8    2.4%    0.0%  __libc_malloc@@GLIBC_2.2.5
+      5    1.5%    0.0%  fwrite@@GLIBC_2.2.5
+      4    1.2%    0.0%  std::basic_ostream<char, std::char_traits<char> >& std::__ostream_insert<char, std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*, long)@@GLIBCXX_3.4.9
+      4    1.2%    0.0%  _IO_file_xsputn@@GLIBC_2.2.5
+      3    0.9%    0.0%  std::ostream& std::ostream::_M_insert<long>(long)@@GLIBCXX_3.4.9
+      2    0.6%    0.0%  std::ostream::operator<<(int)@@GLIBCXX_3.4
+      1    0.3%    0.0%  std::ostreambuf_iterator<char, std::char_traits<char> > std::num_put<char, std::ostreambuf_iterator<char, std::char_traits<char> > >::_M_insert_int<long>(std::ostreambuf_iterator<char, std::char_traits<char> >, std::ios_base&, char, long) const@@GLIBCXX_3.4
+      1    0.3%    0.0%  operator new[](unsigned long)@@GLIBCXX_3.4
+      1    0.3%    0.0%  operator delete(void*)@@GLIBCXX_3.4
+      1    0.3%    0.0%  node::BaseObject::pointer_data()
+      1    0.3%    0.0%  cfree@GLIBC_2.2.5
+      1    0.3%    0.0%  absl::Mutex::UnlockSlow(absl::SynchWaitParams*)
+      1    0.3%    0.0%  __vsnprintf@@GLIBC_2.2.5
+      1    0.3%    0.0%  __read@@GLIBC_2.2.5
+      1    0.3%    0.0%  __pthread_once@GLIBC_2.2.5
+      1    0.3%    0.0%  __open@@GLIBC_2.2.5
+
+ [Bottom up (heavy) profile]:
+  Note: percentage shows a share of a particular caller in the total
+  amount of its parent calls.
+  Callers occupying less than 1.0% are not shown.
+
+   ticks parent  name
+   5394   32.1%  UNKNOWN
+   1836   34.0%    JS: *onValue /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:197:12
+   1667   90.8%      JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+   1667  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+   1045   62.7%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+   1045  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+    622   37.3%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    622  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    160    8.7%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    155   96.9%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    155  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    155  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      5    3.1%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      5  100.0%          JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      5  100.0%            JS: ~ondata node:internal/streams/readable:1005:18
+    948   17.6%    JS: *onColon /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:106:18
+    948  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    583   61.5%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    583  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+    583  100.0%            JS: *emit node:events:455:44
+    365   38.5%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    365  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    365  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+    724   13.4%    JS: *endObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:119:14
+    656   90.6%      JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+    656  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    405   61.7%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    405  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+    251   38.3%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    251  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     68    9.4%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     67   98.5%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     67  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     67  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      1    1.5%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      1  100.0%          JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      1  100.0%            JS: ~ondata node:internal/streams/readable:1005:18
+    429    8.0%    JS: *StreamPosition /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:9:16
+    429  100.0%      JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+    427   99.5%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    250   58.5%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    250  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+    177   41.5%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    177  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    290    5.4%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    186   64.1%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    186  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+    186  100.0%          JS: *emit node:events:455:44
+    186  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+    102   35.2%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    102  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    102  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+    102  100.0%            JS: *emit node:events:455:44
+    119    2.2%    JS: *endArray /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:185:13
+    119  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     68   57.1%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     68  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     68  100.0%            JS: *emit node:events:455:44
+     51   42.9%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     51  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     51  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+    109    2.0%    JS: *startObjectEntry /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:131:21
+    109  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    103   94.5%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    103  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    103  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      6    5.5%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      6  100.0%          JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      6  100.0%            JS: ~ondata node:internal/streams/readable:1005:18
+     58    1.1%    JS: ^wrapSafe node:internal/modules/cjs/loader:1650:18
+     56   96.6%      JS: ^<anonymous> node:internal/modules/cjs/loader:1711:37
+     55   98.2%        JS: ^<anonymous> node:internal/modules/cjs/loader:1858:37
+     55  100.0%          JS: ^<anonymous> node:internal/modules/cjs/loader:1472:33
+     55  100.0%            JS: ^<anonymous> node:internal/modules/cjs/loader:1204:24
+      1    1.8%        JS: ^<anonymous> node:internal/modules/cjs/loader:1204:24
+      1  100.0%          JS: ^traceSync node:diagnostics_channel:326:12
+      1  100.0%            JS: ^wrapModuleLoad node:internal/modules/cjs/loader:238:24
+      1    1.7%      JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/dispatcher/AbstractObjectBuilder.js:1:1
+      1  100.0%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/dispatcher/ObjectDispatcher.js:1:1
+      1  100.0%          JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:1:1
+      1  100.0%            JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:1:1
+      1    1.7%      JS: ^<anonymous> node:internal/modules/cjs/loader:1204:24
+      1  100.0%        JS: ^wrapModuleLoad node:internal/modules/cjs/loader:238:24
+      1  100.0%          JS: ^<anonymous> node:internal/modules/cjs/loader:1496:36
+      1  100.0%            JS: ^require node:internal/modules/helpers:151:19
+
+   2612   15.5%  JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+   1448   55.4%    JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+   1448  100.0%      JS: +ondata node:internal/streams/readable:1005:18
+   1448  100.0%        JS: *emit node:events:455:44
+   1448  100.0%          JS: +addChunk node:internal/streams/readable:548:18
+   1448  100.0%            JS: +readableAddChunkPushByteMode node:internal/streams/readable:461:38
+   1138   43.6%    JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+   1138  100.0%      JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+   1138  100.0%        JS: ^ondata node:internal/streams/readable:1005:18
+   1138  100.0%          JS: *emit node:events:455:44
+   1138  100.0%            JS: ^addChunk node:internal/streams/readable:548:18
+
+    782    4.7%  Builtin: StringAdd_CheckNone
+    449   57.4%    JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    449  100.0%      JS: +ondata node:internal/streams/readable:1005:18
+    449  100.0%        JS: *emit node:events:455:44
+    449  100.0%          JS: +addChunk node:internal/streams/readable:548:18
+    449  100.0%            JS: +readableAddChunkPushByteMode node:internal/streams/readable:461:38
+    321   41.0%    JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    321  100.0%      JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    321  100.0%        JS: ^ondata node:internal/streams/readable:1005:18
+    321  100.0%          JS: *emit node:events:455:44
+    321  100.0%            JS: ^addChunk node:internal/streams/readable:548:18
+
+    777    4.6%  Builtin: RecordWriteSaveFP
+    616   79.3%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    346   56.2%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    346  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+    346  100.0%          JS: *emit node:events:455:44
+    346  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+    265   43.0%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    265  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    265  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+    265  100.0%            JS: *emit node:events:455:44
+     64    8.2%    JS: *match /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:269:10
+     64  100.0%      JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+     64  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     44   68.8%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     44  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+     20   31.3%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     20  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     49    6.3%    Builtin: GrowFastSmiOrObjectElements
+     44   89.8%      JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+     44  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     29   65.9%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     29  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+     15   34.1%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     15  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      5   10.2%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      5  100.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      5  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      5  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     41    5.3%    JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+     41  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     21   51.2%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     21  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     21  100.0%            JS: *emit node:events:455:44
+     19   46.3%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     19  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     19  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      1    2.4%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      1  100.0%          JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      1  100.0%            JS: ~ondata node:internal/streams/readable:1005:18
+
+    700    4.2%  JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+    697   99.6%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    393   56.4%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    393  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+    393  100.0%          JS: *emit node:events:455:44
+    393  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+    298   42.8%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    298  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    298  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+    298  100.0%            JS: *emit node:events:455:44
+
+    683    4.1%  JS: *match /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:269:10
+    519   76.0%    JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+    516   99.4%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    290   56.2%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    290  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+    290  100.0%            JS: *emit node:events:455:44
+    223   43.2%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    223  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    223  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+    160   23.4%    JS: *onValue /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:197:12
+    109   68.1%      JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+    109  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     70   64.2%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     70  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+     39   35.8%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     39  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     51   31.9%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     28   54.9%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     28  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     28  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     23   45.1%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     23  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     23  100.0%            JS: *emit node:events:455:44
+
+    547    3.3%  JS: *endObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:119:14
+    497   90.9%    JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+    497  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    318   64.0%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    318  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+    318  100.0%            JS: *emit node:events:455:44
+    179   36.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    179  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    179  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     49    9.0%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     46   93.9%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     46  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     46  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+     46  100.0%            JS: *emit node:events:455:44
+      2    4.1%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+      2  100.0%          JS: *emit node:events:455:44
+      2  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+      1    2.0%      JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      1  100.0%        JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      1  100.0%          JS: ~ondata node:internal/streams/readable:1005:18
+      1  100.0%            JS: +emit node:events:455:44
+
+    394    2.3%  JS: *matchFrom /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/path/YAJSPath.js:96:14
+    393   99.7%    JS: *match /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:269:10
+    393  100.0%      JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+    393  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    244   62.1%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    244  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+    149   37.9%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    149  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+
+    344    2.0%  JS: *onValue /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:197:12
+    224   65.1%    JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+    224  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    139   62.1%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    139  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+    139  100.0%            JS: *emit node:events:455:44
+     85   37.9%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     85  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     85  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+    116   33.7%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     58   50.0%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     58  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     58  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+     58  100.0%            JS: *emit node:events:455:44
+     55   47.4%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     55  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+     55  100.0%          JS: *emit node:events:455:44
+     55  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+      3    2.6%      JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      3  100.0%        JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      3  100.0%          JS: ~ondata node:internal/streams/readable:1005:18
+      2   66.7%            JS: +emit node:events:455:44
+      1   33.3%            JS: *emit node:events:455:44
+      4    1.2%    JS: +parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      4  100.0%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      4  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      4  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+      4  100.0%            JS: *emit node:events:455:44
+
+    290    1.7%  JS: *push /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:121:9
+    223   76.9%    JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+    223  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    136   61.0%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    136  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+    136  100.0%            JS: *emit node:events:455:44
+     86   38.6%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     86  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     86  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     66   22.8%    JS: *startArray /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:145:15
+     66  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     39   59.1%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     39  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     39  100.0%            JS: *emit node:events:455:44
+     27   40.9%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     27  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     27  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+
+    285    1.7%  JS: *onColon /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:106:18
+    281   98.6%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    174   61.9%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    174  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+    174  100.0%          JS: *emit node:events:455:44
+    174  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+    107   38.1%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    107  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+    107  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+    107  100.0%            JS: *emit node:events:455:44
+      3    1.1%    JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      3  100.0%      JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      3  100.0%        JS: ^ondata node:internal/streams/readable:1005:18
+      3  100.0%          JS: *emit node:events:455:44
+      3  100.0%            JS: ^addChunk node:internal/streams/readable:548:18
+
+    272    1.6%  /usr/lib/x86_64-linux-gnu/libc.so.6
+     37   13.6%    JS: *onColon /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:106:18
+     37  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     27   73.0%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     27  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     27  100.0%            JS: *emit node:events:455:44
+     10   27.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     10  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     10  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     29   10.7%    JS: *endObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:119:14
+     23   79.3%      JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+     23  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     13   56.5%          JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     13  100.0%            JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     10   43.5%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     10  100.0%            JS: +ondata node:internal/streams/readable:1005:18
+      6   20.7%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      4   66.7%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      4  100.0%          JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      4  100.0%            JS: ~ondata node:internal/streams/readable:1005:18
+      2   33.3%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      2  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     13    4.8%    JS: +read node:fs:602:14
+     13  100.0%      JS: +ReadStream._read node:internal/fs/streams:251:38
+     13  100.0%        JS: +Readable.read node:internal/streams/readable:645:35
+     13  100.0%          JS: +maybeReadMore_ node:internal/streams/readable:862:24
+     13  100.0%            JS: +processTicksAndRejections node:internal/process/task_queues:71:35
+      8    2.9%    JS: ^read node:fs:602:14
+      8  100.0%      JS: ^ReadStream._read node:internal/fs/streams:251:38
+      8  100.0%        JS: ^Readable.read node:internal/streams/readable:645:35
+      8  100.0%          JS: ^maybeReadMore_ node:internal/streams/readable:862:24
+      4   50.0%            JS: ^processTicksAndRejections node:internal/process/task_queues:71:35
+      4   50.0%            JS: +processTicksAndRejections node:internal/process/task_queues:71:35
+      7    2.6%    JS: ^wrapSafe node:internal/modules/cjs/loader:1650:18
+      7  100.0%      JS: ^<anonymous> node:internal/modules/cjs/loader:1711:37
+      6   85.7%        JS: ^<anonymous> node:internal/modules/cjs/loader:1858:37
+      6  100.0%          JS: ^<anonymous> node:internal/modules/cjs/loader:1472:33
+      6  100.0%            JS: ^<anonymous> node:internal/modules/cjs/loader:1204:24
+      1   14.3%        JS: ^<anonymous> node:internal/modules/cjs/loader:1204:24
+      1  100.0%          JS: ^traceSync node:diagnostics_channel:326:12
+      1  100.0%            JS: ^wrapModuleLoad node:internal/modules/cjs/loader:238:24
+      6    2.2%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      3   50.0%      JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      3  100.0%        JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      3  100.0%          JS: ~ondata node:internal/streams/readable:1005:18
+      2   66.7%            JS: +emit node:events:455:44
+      1   33.3%            JS: ~addChunk node:internal/streams/readable:548:18
+      3   50.0%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      3  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      3  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+      3  100.0%            JS: *emit node:events:455:44
+      3    1.1%    JS: +parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      3  100.0%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      3  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      3  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+      3  100.0%            JS: *emit node:events:455:44
+      3    1.1%    JS: +emit node:events:455:44
+      2   66.7%      JS: *endObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:119:14
+      2  100.0%        JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      2  100.0%          JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%            JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      1   33.3%      JS: +stream.queue.stream.push /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:40:41
+      1  100.0%        JS: +ObjectDispatcher.dispatch /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/dispatcher/ObjectDispatcher.js:26:17
+      1  100.0%          JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:129:23
+      1  100.0%            JS: +endObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:119:14
+      3    1.1%    JS: *startObjectEntry /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:131:21
+      3  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      3  100.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      3  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      3  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+
+    232    1.4%  Builtin: GrowFastSmiOrObjectElements
+     91   39.2%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     47   51.6%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     47  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+     47  100.0%          JS: *emit node:events:455:44
+     47  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+     43   47.3%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     43  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     43  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+     43  100.0%            JS: *emit node:events:455:44
+      1    1.1%      JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      1  100.0%        JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      1  100.0%          JS: ~ondata node:internal/streams/readable:1005:18
+      1  100.0%            JS: +emit node:events:455:44
+     82   35.3%    JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+     82  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     42   51.2%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     42  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     42  100.0%            JS: *emit node:events:455:44
+     40   48.8%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     40  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     40  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     55   23.7%    JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+     55  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     36   65.5%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     36  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     36  100.0%            JS: *emit node:events:455:44
+     19   34.5%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     19  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     19  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+
+    228    1.4%  JS: *StreamPosition /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamPosition.js:9:16
+    226   99.1%    JS: *startObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:93:16
+    226  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+    131   58.0%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+    131  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+    131  100.0%            JS: *emit node:events:455:44
+     95   42.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     95  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     95  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+
+    204    1.2%  Builtin: StoreIC
+     98   48.0%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     59   60.2%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     59  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+     59  100.0%          JS: *emit node:events:455:44
+     59  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+     37   37.8%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     37  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     37  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+     37  100.0%            JS: *emit node:events:455:44
+      2    2.0%      JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%        JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      2  100.0%          JS: ~ondata node:internal/streams/readable:1005:18
+      1   50.0%            JS: ~addChunk node:internal/streams/readable:548:18
+      1   50.0%            JS: *emit node:events:455:44
+     54   26.5%    JS: *onColon /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:106:18
+     54  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     38   70.4%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     38  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     38  100.0%            JS: *emit node:events:455:44
+     16   29.6%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     16  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     16  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     44   21.6%    JS: *onEndObject /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:115:22
+     44  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     29   65.9%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     29  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     29  100.0%            JS: *emit node:events:455:44
+     15   34.1%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     15  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     15  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      4    2.0%    JS: *startObjectEntry /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:131:21
+      4  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      3   75.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      3  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      3  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      1   25.0%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      1  100.0%          JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      1  100.0%            JS: ~ondata node:internal/streams/readable:1005:18
+
+    170    1.0%  Builtin: KeyedLoadIC_Megamorphic
+     88   51.8%    JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     55   62.5%      JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     55  100.0%        JS: +ondata node:internal/streams/readable:1005:18
+     55  100.0%          JS: *emit node:events:455:44
+     55  100.0%            JS: +addChunk node:internal/streams/readable:548:18
+     31   35.2%      JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     31  100.0%        JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     31  100.0%          JS: ^ondata node:internal/streams/readable:1005:18
+     31  100.0%            JS: *emit node:events:455:44
+      2    2.3%      JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%        JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      2  100.0%          JS: ~ondata node:internal/streams/readable:1005:18
+      2  100.0%            JS: +emit node:events:455:44
+     50   29.4%    JS: *onColon /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:106:18
+     50  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+     34   68.0%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     34  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+     34  100.0%            JS: *emit node:events:455:44
+     16   32.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     16  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+     16  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+     11    6.5%    JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+     11  100.0%      JS: +ondata node:internal/streams/readable:1005:18
+     11  100.0%        JS: *emit node:events:455:44
+     11  100.0%          JS: +addChunk node:internal/streams/readable:548:18
+     11  100.0%            JS: +readableAddChunkPushByteMode node:internal/streams/readable:461:38
+      7    4.1%    JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      7  100.0%      JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      7  100.0%        JS: ^ondata node:internal/streams/readable:1005:18
+      7  100.0%          JS: *emit node:events:455:44
+      7  100.0%            JS: ^addChunk node:internal/streams/readable:548:18
+      4    2.4%    JS: *popContainer /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:248:17
+      4  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      2   50.0%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      2  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      2   50.0%        JS: +<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%          JS: +ondata node:internal/streams/readable:1005:18
+      2  100.0%            JS: *emit node:events:455:44
+      3    1.8%    JS: *startObjectEntry /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/context/StreamContext.js:131:21
+      3  100.0%      JS: *parse /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/lib/utils/JsonSaxParser.js:324:10
+      2   66.7%        JS: ^<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      2  100.0%          JS: ^stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      2  100.0%            JS: ^ondata node:internal/streams/readable:1005:18
+      1   33.3%        JS: ~<anonymous> /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/dist/main/yajs.js:46:5
+      1  100.0%          JS: ~stream.write /home/thiago/workspace/yajs/.claude/worktrees/agent-a553fe25a05f302b7/node_modules/through/index.js:25:27
+      1  100.0%            JS: ~ondata node:internal/streams/readable:1005:18
+
