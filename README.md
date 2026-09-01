@@ -292,8 +292,9 @@ $ echo '{"a":{"key1":1,"key2":2,"key3":3}}' | yajs '$.a<key1 key3>'
 Option                    | Type    | Default | Description
 --------------------------|---------|---------|------------
 `pathIncludeArrayIndex`   | boolean | `false` | Include array indices (as numbers) in each emitted chunk's `path`
-`fastPath`                | boolean | `false` | Opt-in NDJSON fast path — see [NDJSON fast path](#ndjson-fast-path-opt-in) below
-`fastPathMaxRecordBytes`  | number  | `8388608` (8 MiB) | Per-record size cutoff for `fastPath` — see below
+`fastPath`                | boolean | `false` | Opt-in fast path — see [NDJSON fast path](#ndjson-fast-path-opt-in) and [Array-splitter fast path](#array-splitter-fast-path-opt-in) below
+`fastPathMode`            | `'ndjson'` \| `'array'` | `'ndjson'` | Which shape `fastPath` assumes — see below
+`fastPathMaxRecordBytes`  | number  | `8388608` (8 MiB) | Per-record (or, under `fastPathMode: 'array'`, per-element) size cutoff for `fastPath` — see below
 
 ```js
 const yajs = require('yajson-stream');
@@ -363,12 +364,66 @@ Only matter if your data can actually contain them:
 
 ### What's deferred
 
-Per issue #78's own recommended build order, this ships only the
-"line/chain fast path" — the array splitter (treating a top-level/nested JSON
-array as comma-delimited "NDJSON") and the full span-parsing hybrid engine
-(which also solves the "one huge record in an otherwise-small-record stream"
-memory case more directly) are deferred to future work — see the issue for
-details.
+Per issue #78's own recommended build order, this shipped the "line/chain
+fast path" first, with the array splitter following in issue #86 (see
+[Array-splitter fast path](#array-splitter-fast-path-opt-in) below). The full
+span-parsing hybrid engine (which also solves the "one huge record in an
+otherwise-small-record stream" memory case more directly) remains deferred to
+future work — see the issue for details.
+
+## Array-splitter fast path (opt-in)
+
+For input that is one big top-level JSON array of records (e.g. a REST API
+response shaped like `[{...}, {...}, ...]`) — the common shape `fastPath`'s
+NDJSON mode does *not* target — `{ fastPath: true, fastPathMode: 'array' }`
+generalizes the same idea: a lightweight quote/escape/bracket-depth-aware
+byte scanner finds each comma-delimited element's raw text span (instead of
+splitting on `\n`), and each one is handed to `JSON.parse` plus the same
+compiled-selector walker the NDJSON mode uses.
+
+```js
+const stream = yajs('$.field2.nested', { fastPath: true, fastPathMode: 'array' });
+```
+
+`fastPathMode` defaults to `'ndjson'` — same "no auto-detection" philosophy
+as `fastPath` itself, picking between the two shapes is always an explicit,
+opt-in choice. Choosing the wrong one never produces wrong output, just no
+speedup: `fastPathMode: 'array'` on input that doesn't start with `[` (a
+plain single document, or NDJSON-shaped lines) is relayed to the normal
+streaming engine byte-for-byte identically to `fastPath: false`, and
+`fastPathMode: 'ndjson'` (the default) already handles a top-level array
+correctly too (see the "root array" case in `10-fastpath.ts`) via its own
+per-line `JSON.parse` and element streaming — `'array'` exists to make that
+specific shape fast by skipping the line-oriented framing an array doesn't
+need.
+
+**Fallback works differently here than in NDJSON mode.** NDJSON's fast path
+falls back per-record and resumes fast-path scanning for every record after
+it, because each record is a fully independent top-level document. Array
+elements are not independent in that sense — they share one running
+position (the array's own element index, part of the path when
+`pathIncludeArrayIndex` is on). So instead: the scanner keeps finding
+element boundaries correctly (it doesn't need `JSON.parse` to do that, only
+to evaluate the found content) all the way through the first element that
+can't be fast-pathed — a malformed element, the `"""` extension (which
+`JSON.parse` can never accept but the real engine does), or one that exceeds
+`fastPathMaxRecordBytes` — and from there, the *rest of the array* (not just
+that one element) is handed to the real engine, with its emitted indices
+adjusted back so they stay correct across the handoff. Once the array's real
+closing `]` is found, anything further in the stream (a subsequent
+top-level value, or nothing) is handled normally. A clean array with no such
+anomalies — the common case this mode targets — never falls back at all.
+
+Re-measured against the repo's dataset 1 (the same 1M NDJSON records used
+for the NDJSON fast path's own number, reshaped into one top-level array):
+roughly **~1.9x** end-to-end throughput for `$.field2.nested`, measured
+median-of-9 on a heavily loaded shared box (the NDJSON fast path's own
+number, measured the same way in the same run for a same-conditions
+baseline, came out to ~2.4x here too — well under its README-documented ~5x,
+confirming the whole box was under contention that run, not something
+specific to this mode) — see
+[issue #86](https://github.com/tsouza/yajs/issues/86) for the full
+investigation.
 
 ## Non-standard extensions
 

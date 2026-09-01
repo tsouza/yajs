@@ -1,6 +1,7 @@
 import through from 'through';
 import { ThroughStream } from 'through';
 import { StreamContext } from './lib/context/StreamContext';
+import { ArrayFastPath } from './lib/fastpath/ArrayFastPath';
 import { NdjsonFastPath } from './lib/fastpath/NdjsonFastPath';
 import { YAJSPath } from './lib/path/YAJSPath';
 import { JsonSaxParser } from './lib/utils/JsonSaxParser';
@@ -81,12 +82,48 @@ export interface YAJSOptions {
     fastPath?: boolean;
 
     /**
+     * Selects which input SHAPE `fastPath` assumes it is looking at. Only
+     * meaningful when `fastPath` is true. Two shapes are supported, and -
+     * same "no auto-detection" philosophy as `fastPath` itself - picking
+     * between them is always an explicit, opt-in choice, never sniffed
+     * from the input:
+     *
+     *   - `'ndjson'` (the default): the input is many whitespace-separated
+     *     top-level JSON values - see `fastPath`'s own doc comment above.
+     *   - `'array'`: the input is (a prefix of whitespace, then) exactly
+     *     one big top-level JSON array, whose elements are the unit
+     *     `fastPath` splits on - the "array splitter" fast path (issue
+     *     #86), treating a top-level array as comma-delimited "NDJSON".
+     *     Once that array's closing `]` is found, anything further in the
+     *     stream is handled by the normal streaming engine (see
+     *     ArrayFastPath.ts's class doc comment for the full design and,
+     *     in particular, why - unlike `'ndjson'` - a single element this
+     *     mode can't fast-path falls back for the *rest* of the array
+     *     rather than resuming afterward).
+     *
+     * Input that doesn't match the selected shape is never silently
+     * misinterpreted: `'array'` on input that isn't a top-level array (a
+     * plain single document, or NDJSON-shaped lines) simply never finds
+     * a fast-pathable element and produces correct output via the normal
+     * streaming engine end to end, exactly as if `fastPath` were false -
+     * just without the speedup. Likewise `'ndjson'` on a top-level-array
+     * input already works correctly today (see the `$` "root array" case
+     * in 10-fastpath.ts) via its own per-line JSON.parse + element
+     * streaming - `'array'` exists to make that specific common shape
+     * fast too, by skipping the line-oriented framing NDJSON mode assumes
+     * an array doesn't need.
+     */
+    fastPathMode?: 'ndjson' | 'array';
+
+    /**
      * Per-record size cutoff, in bytes of a record's raw (not yet parsed)
      * text, above which `fastPath` routes that one record to the normal
      * streaming engine instead of ever materializing it as a JS
      * string/`JSON.parse` tree - guards against unbounded memory growth on
-     * an unexpectedly (or adversarially) huge single record. Only
-     * meaningful when `fastPath` is true. Defaults to 8 MiB.
+     * an unexpectedly (or adversarially) huge single record. Under
+     * `fastPathMode: 'array'`, the same cutoff applies per array ELEMENT
+     * instead of per NDJSON record. Only meaningful when `fastPath` is
+     * true. Defaults to 8 MiB.
      */
     fastPathMaxRecordBytes?: number;
 }
@@ -117,6 +154,32 @@ export default function yajs(path: string, options: YAJSOptions = {
     const reportError = (err: Error) => stream.emit('error', err);
 
     let stream: ThroughStream;
+    if (options.fastPath && options.fastPathMode === 'array') {
+        // Opt-in array-splitter fast path (see YAJSOptions.fastPathMode's
+        // doc comment and issue #86) - same idea as the NDJSON branch just
+        // below, generalized to a top-level array's comma-delimited
+        // elements instead of newline-delimited lines. No `onBoundary` hook
+        // is needed here (unlike the NDJSON branch): ArrayFastPath's own
+        // structural scanner independently tracks bracket depth through a
+        // fallback relay, so it always knows exactly where to stop
+        // rebasing/wrapping without the real engine's help - see
+        // ArrayFastPath.ts's class doc comment.
+        const fastPath = new ArrayFastPath(yajsPath, options, emit, reportError,
+            (arrayEmit) => {
+                const parser = createEngine(yajsPath, options, arrayEmit, reportError);
+                return {
+                    write: (buf: Buffer) => parser.parse(buf),
+                    finish: () => { parser.finish(); parser.flushPendingString(); },
+                };
+            });
+        stream = through(
+            (chunk: Buffer | string) => fastPath.write(typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
+            () => {
+                fastPath.end();
+                stream.queue(null);
+            });
+        return stream;
+    }
     if (options.fastPath) {
         // Opt-in NDJSON fast path (see YAJSOptions.fastPath's doc comment
         // and issue #78) - bypasses the SAX tokenizer entirely for input
