@@ -2,6 +2,7 @@ import through from 'through';
 import { ThroughStream } from 'through';
 import { StreamContext } from './lib/context/StreamContext';
 import { ArrayFastPath } from './lib/fastpath/ArrayFastPath';
+import { HybridFastPath } from './lib/fastpath/HybridFastPath';
 import { NdjsonFastPath } from './lib/fastpath/NdjsonFastPath';
 import { YAJSPath } from './lib/path/YAJSPath';
 import { JsonSaxParser } from './lib/utils/JsonSaxParser';
@@ -78,8 +79,34 @@ export interface YAJSOptions {
      * the same message shape and the same per-record resync guarantee
      * (issue #50) - only that one number can differ from a non-fastPath,
      * single-`.write()`-call run of the same input.
+     *
+     * `true` (or `'line'`) selects the fast path described above. Set it
+     * to `'hybrid'` instead to select the newer SKIP/PARSE/DESCEND
+     * span-parsing hybrid (issues #79/#87): rather than materializing a
+     * whole record via `JSON.parse` and walking the result, it navigates
+     * the record's raw bytes directly to the matched value(s) and
+     * `JSON.parse`s only their exact byte span. It is a strict SUBSET of
+     * `'line'` mode's selector coverage - only `$..k1.k2...kn`-shaped
+     * descendant selectors (one `..`, no wildcards/ancestor-filters, no
+     * definite prefix before the `..`, no `pathIncludeArrayIndex`) get the
+     * hybrid's own scanning; every other selector shape - including a
+     * plain definite chain like `$.field2.nested`, which `'line'` mode
+     * already handles well via a single `JSON.parse` - transparently
+     * behaves exactly like `'line'` mode instead (see
+     * HybridFastPath.ts/HybridSpanEvaluator.ts for the full reasoning).
+     * For the descendant-shaped selectors it does compile, it measures
+     * substantially better throughput than `'line'` mode on high-
+     * selectivity matches (see README's Performance section for fresh,
+     * per-shape numbers) and - unlike `'line'` mode - never needs to fall
+     * back to the real engine just because ONE record is huge (see
+     * `hybridMaxSpanBytes` below): it only ever buffers matched spans, not
+     * whole records, so an otherwise-enormous document with modest
+     * individual matches still gets the speedup. Same opt-in philosophy
+     * as `'line'` mode: no auto-detection of which mode best suits a given
+     * selector/input shape, and both are newer, less battle-tested code
+     * paths than the default engine.
      */
-    fastPath?: boolean;
+    fastPath?: boolean | 'line' | 'hybrid';
 
     /**
      * Selects which input SHAPE `fastPath` assumes it is looking at. Only
@@ -117,15 +144,30 @@ export interface YAJSOptions {
 
     /**
      * Per-record size cutoff, in bytes of a record's raw (not yet parsed)
-     * text, above which `fastPath` routes that one record to the normal
-     * streaming engine instead of ever materializing it as a JS
-     * string/`JSON.parse` tree - guards against unbounded memory growth on
-     * an unexpectedly (or adversarially) huge single record. Under
-     * `fastPathMode: 'array'`, the same cutoff applies per array ELEMENT
-     * instead of per NDJSON record. Only meaningful when `fastPath` is
-     * true. Defaults to 8 MiB.
+     * text, above which `fastPath: 'line'` (or `true`) routes that one
+     * record to the normal streaming engine instead of ever materializing
+     * it as a JS string/`JSON.parse` tree - guards against unbounded
+     * memory growth on an unexpectedly (or adversarially) huge single
+     * record. Under `fastPathMode: 'array'`, the same cutoff applies per
+     * array ELEMENT instead of per NDJSON record. Only meaningful for
+     * `'line'` mode (including `fastPathMode: 'array'`) - for `'hybrid'`
+     * mode's own, differently-scoped cutoff, see `hybridMaxSpanBytes`.
+     * Defaults to 8 MiB.
      */
     fastPathMaxRecordBytes?: number;
+
+    /**
+     * `fastPath: 'hybrid'`'s own size cutoff - unlike
+     * `fastPathMaxRecordBytes`, this bounds one MATCHED VALUE's own raw
+     * byte span, not the whole record it's found in (see `fastPath`'s doc
+     * comment for why that distinction is the point of hybrid mode). A
+     * record whose matches all stay under this cutoff gets the full
+     * hybrid speedup no matter how large the record itself is; a record
+     * with even one match over this cutoff falls back to the real
+     * streaming engine for the rest of the stream (see
+     * HybridFastPath.ts). Defaults to 8 MiB.
+     */
+    hybridMaxSpanBytes?: number;
 }
 
 // The declared return type is NodeJS.ReadWriteStream rather than
@@ -181,19 +223,26 @@ export default function yajs(path: string, options: YAJSOptions = {
         return stream;
     }
     if (options.fastPath) {
-        // Opt-in NDJSON fast path (see YAJSOptions.fastPath's doc comment
-        // and issue #78) - bypasses the SAX tokenizer entirely for input
-        // JSON.parse can handle a line at a time, falling back to a normal
-        // engine instance (createEngine - the exact same one the default,
-        // non-fastPath branch below uses) for anything it can't.
-        const fastPath = new NdjsonFastPath(yajsPath, options, emit, reportError,
-            (onBoundary) => {
-                const parser = createEngine(yajsPath, options, emit, reportError, onBoundary);
-                return {
-                    write: (buf: Buffer) => parser.parse(buf),
-                    finish: () => { parser.finish(); parser.flushPendingString(); },
-                };
-            });
+        // Opt-in fast path (see YAJSOptions.fastPath's doc comment) -
+        // bypasses the SAX tokenizer entirely for input JSON.parse can
+        // handle, falling back to a normal engine instance (createEngine -
+        // the exact same one the default, non-fastPath branch below uses)
+        // for anything it can't. `'hybrid'` selects the SKIP/PARSE/DESCEND
+        // span-parsing evaluator (issues #79/#87) for selectors it
+        // supports (falling back to the same 'line' machinery below for
+        // any it doesn't - see HybridFastPath.ts); anything else
+        // (`true`/`'line'`) selects the original line/chain fast path
+        // (issue #78).
+        const fallbackFactory = (onBoundary: () => void) => {
+            const parser = createEngine(yajsPath, options, emit, reportError, onBoundary);
+            return {
+                write: (buf: Buffer) => parser.parse(buf),
+                finish: () => { parser.finish(); parser.flushPendingString(); },
+            };
+        };
+        const fastPath = options.fastPath === 'hybrid' ?
+            new HybridFastPath(yajsPath, options, emit, reportError, fallbackFactory) :
+            new NdjsonFastPath(yajsPath, options, emit, reportError, fallbackFactory);
         stream = through(
             (chunk: Buffer | string) => fastPath.write(typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
             () => {

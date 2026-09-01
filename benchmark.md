@@ -143,3 +143,61 @@ JSONStream | Yes       | 51 m, 23.581 s | 90.82K  | 16.55%
 oboe.js    | No        | -              | -       | -
 
 *NOTE: oboe.js did not complete due to out of memory error.*
+
+## SKIP/PARSE/DESCEND span-parsing hybrid fast path (2026)
+
+A different axis from the rest of this document: not yajs vs. other
+libraries, but yajs's own default (`fastPath: false`) streaming engine vs.
+`fastPath: 'hybrid'` (see the README's own section on it) on the same
+input/selector. Method: interleaved paired runs in one process (baseline,
+then hybrid, alternating - bursty unrelated load on the machine this way
+hits both sides roughly equally), `process.cpuUsage()` around each full
+run, median of several pairs reported; one untimed warmup pair first.
+Machine was shared/under load from concurrent unrelated work during this
+run (own commentary throughout this document already notes yajs's numbers
+are reference-only for the same reason) - re-run locally
+(`src/bench` doesn't include this harness; see the PR that added this
+section, or write an interleaved-pair script per this file's own
+"Method" section above, against `yajs(selector, {fastPath:'hybrid'})` vs.
+`yajs(selector)`) for a number you can rely on.
+
+Selector | Input | Matches | Median CPU speedup | Wall speedup (noisier)
+---------|-------|--------:|:-------------------:|:-------:
+`$.field2.nested` | Dataset 1 (full, 1M records) | 2,000,000 | 2.31x [2.11x-2.43x] | 2.37x [2.19x-2.62x]
+`$..plugins` | Dataset 2 (real data, 2 GB prefix, ~368K records) | 1,840,260 | ~3.2-3.4x (2 samples, see note) | ~3.3x
+`$..array.deep1` | Dataset 4 (real data, 84 MB / 75,652-field sample) | 4,236,512 | 0.85x (no win - see below) | 1.10x
+`$..plugins` | Synthetic "whale record" (one 35 MB top-level object, 300,000 fields, 1-in-50 match) | 6,000 | 5.11x [4.98x-5.13x] | 5.84x [4.64x-6.90x]
+
+Notes:
+
+- **Dataset 1** (`$.field2.nested`, no `..`) doesn't compile a hybrid
+  plan at all - it transparently delegates to the existing `'line'` fast
+  path (see README's "Why a separate mode"), so this number is really
+  `'line'` mode's own, inherited via fallback - included for completeness,
+  not as evidence of anything new.
+- **Dataset 2** ran against a clean 2 GB byte-prefix of the real,
+  freshly-decompressed dataset file (trimmed to the last complete NDJSON
+  line), not a small sample - `$..plugins` is genuinely selective in this
+  real Elasticsearch-monitoring-shaped data (most of each ~5.3 KB record
+  isn't a plugins list). Only one full timed pair completed before the
+  shared machine's load made further pairs impractically slow to wait
+  out; the warmup pair (3.19x) and the one completed timed pair (3.43x)
+  are both reported as the honest range rather than a single cherry-picked
+  number.
+- **Dataset 4** (`$..array.deep1`) is the one genuine surprise of this
+  measurement pass: this dataset's own generator turns out to nest a
+  `deep1`-bearing `array` under **nearly every** record's content (not a
+  small selective fraction), so there's very little for the SKIP side of
+  SKIP/PARSE/DESCEND to actually skip past - see the README's Performance
+  section for the full honest writeup. Differential correctness against
+  the default engine on this exact sample is exact (4,236,512 matches,
+  byte-identical output, `equal: true`) - this is a genuine "no speed win
+  here for this shape," not a bug.
+- **Synthetic whale record**: built specifically to test the property
+  dataset 4 was originally expected to demonstrate - one huge top-level
+  object where selectivity is genuinely high (most fields are irrelevant
+  noise; 1 in 50 contains the matched key nested a few levels down).
+  5.11x median CPU speedup, consistent with dataset 2's own high-
+  selectivity number - confirms the architecture's real target case, kept
+  separate from dataset 4's own (as it turns out, low-selectivity)
+  content so neither number misrepresents the other.
