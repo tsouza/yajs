@@ -188,13 +188,22 @@ export class GenericWalker implements FastPathDocumentEvaluator {
     }
 
     private emitNonScalar(v: any): void {
-        const built = this.hasDrop ? this.buildWithDrop(v, true) : v;
-        if (this.hasDrop) { this.builtByNode.set(v, built); }
+        // Issue #95: the project gate must run against the object's FULL,
+        // undropped top-level key set (its own specified evaluation order -
+        // gate first, drop second) - `v` is the raw JSON.parse()'d source
+        // object/array, never itself mutated by buildWithDrop() below, so
+        // it's always the right thing to gate against regardless of
+        // whether hasDrop is also true; only the (possibly stripped) BUILT
+        // copy passed to emitCb differs. This also means a rejected gate no
+        // longer pays to build a drop-stripped copy it would just discard.
         if (this.hasProject) {
-            const ok = this.projectHelper.filters((key) =>
-                Object.prototype.hasOwnProperty.call(built, key));
+            const ok = this.projectHelper.filters(
+                (key) => Object.prototype.hasOwnProperty.call(v, key),
+                () => Object.keys(v));
             if (!ok) { return; }
         }
+        const built = this.hasDrop ? this.buildWithDrop(v, true) : v;
+        if (this.hasDrop) { this.builtByNode.set(v, built); }
         this.emitCb(this.position.path(this.includeIdx), built);
     }
 
@@ -380,6 +389,16 @@ export class ChainEvaluator implements FastPathDocumentEvaluator {
     private emitOne(v: any, trail: Array<string | number>, idx: number): void {
         let out = v;
         if (v !== null && typeof v === 'object') {
+            // Issue #95: gate on `v` (the full, undropped object) BEFORE
+            // stripping - same reasoning as GenericWalker.emitNonScalar()
+            // above; a rejected gate no longer pays to build a
+            // drop-stripped copy it would just discard.
+            if (this.hasProject) {
+                const ok = this.projectHelper.filters(
+                    (key) => Object.prototype.hasOwnProperty.call(v, key),
+                    () => Object.keys(v));
+                if (!ok) { return; }
+            }
             if (this.hasDrop && isPlainObject(v)) {
                 const stripped: any = {};
                 const keys = Object.keys(v);
@@ -391,11 +410,6 @@ export class ChainEvaluator implements FastPathDocumentEvaluator {
                     });
                 }
                 out = stripped;
-            }
-            if (this.hasProject) {
-                const ok = this.projectHelper.filters((key) =>
-                    Object.prototype.hasOwnProperty.call(out, key));
-                if (!ok) { return; }
             }
         }
         let path: Array<string | number>;

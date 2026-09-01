@@ -1,3 +1,4 @@
+import { isEmpty } from 'lodash';
 import { Stack } from '../utils/Stack';
 
 export abstract class AbstractObjectBuilder {
@@ -6,6 +7,24 @@ export abstract class AbstractObjectBuilder {
     private mStack = new Stack<IJsonNode>();
     private mDropKeys: any = Object.create(null);
     private mDrop;
+
+    // Issue #95's amended scope (project + drop-keys combined, gated on a
+    // regex primitive - #96): when this dispatcher's project filter is ALSO
+    // active (see ObjectDispatcher's override of deferDropKeysForCombinedProject()
+    // below), a top-level dropped key can no longer be skipped-during-
+    // construction the way standalone drop-keys always has been (see
+    // startObjectEntry()/onValue() below) - the project gate must see the
+    // matched object's FULL, undropped top-level key set (per #95's own
+    // specified evaluation order: gate first against the complete object,
+    // drop second), and a key that's never attached in the first place is
+    // invisible to that gate. So in that one case, every key is always
+    // fully attached, and the drop happens as a surgical post-processing
+    // step instead (see ObjectDispatcher.dispatch()'s dropDeferredKeys()
+    // call, run right after the gate passes and right before the listener
+    // fires). Standalone drop-keys (the overwhelming common case - no
+    // project active) is untouched: it keeps skipping construction of a
+    // dropped subtree entirely, exactly as before.
+    private mDeferDropKeys = false;
 
     constructor() {
         this.push(new RootNode());
@@ -16,6 +35,37 @@ export abstract class AbstractObjectBuilder {
             obj[val] = true;
             return obj;
         }, Object.create(null));
+        this.mDeferDropKeys = !isEmpty(dropKeys) && this.deferDropKeysForCombinedProject();
+    }
+
+    // Overridden by ObjectDispatcher to report whether its project ({...})
+    // filter is also active - see mDeferDropKeys's own comment above for
+    // why that changes how drop-keys behaves during construction. Called
+    // from the dropKeys setter above, always AFTER the subclass's own
+    // constructor has finished running (dropKeys is only ever set on an
+    // already-fully-constructed dispatcher - see StreamContext.ts), so an
+    // override reading its own fields here always sees them initialized.
+    protected deferDropKeysForCombinedProject(): boolean {
+        return false;
+    }
+
+    // Issue #95: the post-processing counterpart to mDeferDropKeys above -
+    // deletes this match's own top-level dropped keys from the finished
+    // root object. A no-op whenever mDeferDropKeys was never set (either no
+    // drop-keys at all, or standalone drop-keys, which already dropped its
+    // keys during construction instead - see startObjectEntry()/onValue()).
+    protected dropDeferredKeys(): void {
+        if (!this.mDeferDropKeys) {
+            return;
+        }
+        const result = this.peek().value;
+        if (result && typeof result === 'object') {
+            for (const key in this.mDropKeys) {
+                if (Object.prototype.hasOwnProperty.call(result, key)) {
+                    delete result[key];
+                }
+            }
+        }
     }
 
     startObject(): void {
@@ -26,7 +76,7 @@ export abstract class AbstractObjectBuilder {
 
     startObjectEntry(key: string): void {
         this.fieldName = key;
-        if (this.mDropKeys[key] && this.mStack.size === 2) {
+        if (!this.mDeferDropKeys && this.mDropKeys[key] && this.mStack.size === 2) {
             this.mDrop = true;
         }
     }

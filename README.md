@@ -108,18 +108,49 @@ YAJS Selector                     | Description
 `..[<path filter>]<key>`          | Recursive descendant operator if path filter evaluates to true (see example below)
 `<key>{<keys filter>}`            | Project: emit the matched object only if the keys filter evaluates to true. Only supported at the end of the expression (see example below)
 `<key><k1 k2 ...>`                | Drop keys: emit the matched object *without* the listed top-level keys. Only supported at the end of the expression (see example below)
+`{/pattern/}`, `[/pattern/]`      | Regex filter primitive: matches if the filtered-against key set contains at least one key matching `pattern` (see [Regex filter primitive](#regex-filter-primitive-pattern) below)
 
 Filter expressions (inside `[...]` and `{...}`) support the boolean
 operators `&&`, `||`, `!` and parentheses `(...)`. A bare list of
 space-separated keys is also accepted; in `{...}` it means "all of these
-keys present" and in `<...>` it lists the keys to drop.
+keys present" and in `<...>` it lists the keys to drop. A slash-delimited
+`/pattern/` term is also accepted anywhere a bare key is (except inside
+`<...>` — see [Regex filter primitive](#regex-filter-primitive-pattern)).
 
-`{...}` and `<...>` are mutually exclusive — a selector may end in one or
-the other, not both. Combining them is rejected up front with a clear error:
+`{...}` and `<...>` are mutually exclusive by default — a selector may end
+in one or the other, not both:
 
 ```bash
 $ echo '{}' | yajs '$.a{key1}<key2>'
-Invalid selector "$.a{key1}<key2>": A selector can't combine project ({...}) and drop-keys (<...>) - they are mutually exclusive; use only one of them.
+Invalid selector "$.a{key1}<key2>": A selector can't combine project ({...}) and drop-keys (<...>) - they are mutually exclusive; use only one of them - UNLESS at least one of the two uses a regex filter (/pattern/), in which case they may be combined as `{...}<...>` (project first, then drop-keys), e.g. `$.a{/re/}<key2>`.
+```
+
+**Exception:** when at least one side uses the [regex filter
+primitive](#regex-filter-primitive-pattern), `{...}` and `<...>` *may* be
+combined, written in that order (`{...}<...>` — project first, then
+drop-keys; the reversed order `<...>{...}` is never allowed, regex or not).
+The project filter is evaluated first, against the matched object's full,
+undropped top-level keys; if it passes, the listed keys are then dropped
+from what's emitted:
+
+```bash
+$ echo '{"a":{"key1":1,"key2":2,"other":3}}' | yajs '$.a{/^key\d+$/}<other>'
+{"key1":1,"key2":2}
+```
+
+A pure-literal combination — no regex primitive anywhere in either
+clause — stays rejected exactly as shown above; combining them only gains a
+defined meaning once a regex is involved (see
+[issue #95](https://github.com/tsouza/yajs/issues/95)).
+
+One edge case worth calling out explicitly: the project gate is checked
+against the object's *full* key set before drop-keys removes anything, so a
+regex that matches a key drop-keys is *also* about to remove is not a
+contradiction — the gate already fired:
+
+```bash
+$ echo '{"a":{"key1":1,"other":2}}' | yajs '$.a{/^key1$/}<key1>'
+{"other":2}
 ```
 
 ### Wildcard `*`
@@ -176,6 +207,70 @@ Boolean operators work here too:
 $ echo '{"a":[{"key1":{"child":"v1"}},{"key3":{"child":"v3"}}]}' | yajs '$..[key1 || key2]child'
 "v1"
 ```
+
+### Regex filter primitive: `/pattern/`
+
+Both `{...}` (project) and `[...]` (path filters) accept a slash-delimited
+regex term, e.g. `{/^key\d+$/}`, alongside the plain bare-key primitive
+(`{key1}`). It generalizes "is this exact key present" to "is there a key
+*matching this pattern* present" — an **existential** match evaluated
+against the filtered-against key set: the matched object's own top-level
+keys for project, or the ancestor keys traversed along the descent path for
+a path filter (the same set the bare-key primitive already tests there).
+
+```bash
+$ printf '{"a":{"key1":1,"other":2}}\n{"a":{"foo":1}}\n' | yajs '$.a{/^key\d+$/}'
+{"key1":1,"other":2}
+```
+
+The first record's `a` has a key matching `^key\d+$` (`key1`), so it's
+emitted whole (the regex primitive, like the bare-key one, is a gate on
+*whether* to emit — not a projection/pick of matching keys); the second
+has no such key, so nothing is emitted for it.
+
+It composes with the existing boolean grammar exactly like any other
+primitive — bare keys, `&&`, `||`, `!`, and parentheses:
+
+```bash
+$ echo '{"a":{"foo":1,"key9":2}}' | yajs '$.a{foo && /^key\d+$/}'
+{"foo":1,"key9":2}
+```
+
+And the same primitive works in a path filter, gating descent instead of
+emission:
+
+```bash
+$ echo '{"key1":{"target":"v1"},"safe":{"target":"v2"}}' | yajs '$..[/^key\d+$/]target'
+"v1"
+```
+
+A few notes on the syntax and its safety:
+
+* **Delimiter.** `/pattern/` (slash-delimited, mirroring JS regex literals)
+  was chosen over a backslash-delimited alternative because backslash is
+  already meaningful elsewhere in this grammar (string escapes), risking
+  lexer ambiguity — see
+  [issue #96](https://github.com/tsouza/yajs/issues/96) for the full
+  discussion. One accepted consequence: a selector can no longer address a
+  literal key whose *name* happens to be exactly slash-framed (e.g. a JSON
+  key genuinely named `/foo/`) via the bare-key filter syntax — that shape
+  is always parsed as a regex now, the same trade-off a JS identifier named
+  exactly like a regex literal runs into.
+* **Dialect.** Patterns compile via JS's own `RegExp` (no flags — the
+  pattern text itself is the whole `RegExp` source).
+* **Not supported in drop-keys (`<...>`).** Drop-keys is a flat list of
+  exact key names to remove, not a predicate — using `/pattern/` there is
+  rejected the same way `&&`/`||`/`!`/parentheses already are (see
+  "Drop keys" below).
+* **Safety.** A regex pattern is user-supplied input from a CLI/library
+  selector argument, same trust level as every other filter expression this
+  library already compiles straight to executable JS (see "How it works"
+  below) — so pattern *syntax* carries no extra injection risk. What's new
+  is evaluation *cost*: a pathological pattern (e.g. one with nested
+  quantifiers) can be slow to match against certain input. Patterns are
+  capped at 200 characters (a cheap, generous bound on that cost, not a
+  sandbox — ordinary patterns are unaffected) and rejected with a clean,
+  catchable error if invalid or over the cap.
 
 ### Self-nesting descendant matches: innermost by default
 
@@ -283,6 +378,15 @@ object's own entries are dropped:
 $ echo '{"a":{"key1":1,"key2":2,"key3":3}}' | yajs '$.a<key1 key3>'
 {"key2":2}
 ```
+
+Only a flat, space-separated list of exact key names is accepted here —
+boolean operators (`&&`, `||`, `!`), parentheses, and the
+[regex filter primitive](#regex-filter-primitive-pattern) are all rejected,
+since "drop key1 || key2" (or "drop everything matching a pattern") isn't an
+unambiguous instruction the way project/filter's single true/false gate is.
+It *can* be combined with a project (`{...}`) clause on the same
+selector — see [above](#yajs-selector-syntax) — but only when the project
+side uses a regex primitive.
 
 ## Options
 
