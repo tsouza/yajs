@@ -1,50 +1,86 @@
-// Fast-path prototype: evaluate a compiled YAJSPath against a fully
-// materialized (JSON.parse'd) value, emitting {path, value} matches that
-// are intended to be byte-identical (content AND order) with the real
-// streaming engine's output for the same document.
+// NDJSON fast-path evaluators: given a top-level value already produced by
+// native `JSON.parse` (rather than tokenized byte-by-byte), walk it against
+// a compiled YAJSPath selector and report the same {path, value} matches -
+// in the same order - the real streaming engine (StreamContext +
+// JsonSaxParser) would have produced for the same document. See #78 for the
+// full design writeup and the ~40,000-case differential comparison this was
+// validated against; see NdjsonFastPath.ts for how a document ends up here
+// and what happens to input this can't safely handle.
 //
-// Two evaluators:
-//  - GenericWalker: reuses the real YAJSPath.match() + StreamPosition
-//    machinery, replicating StreamContext's match-attempt placement.
-//    Correct by construction wrt the pattern matcher; used as the
-//    general-case evaluator and as the reference for the chain evaluator.
-//  - ChainEvaluator: compiled fast path for "definite pure-key chains"
-//    ($.k1.k2....kn, no wildcards/descendants/ancestor-filters), the
-//    NDJSON hot case. O(selector length) per document.
+// Two evaluators, chosen per-selector by compileFastPathEvaluator():
+//
+//  - GenericWalker: reuses the real matcher (YAJSPath.match() +
+//    StreamPosition), replicating StreamContext's own match-attempt
+//    placement (see walkDocument()/element()/enterObject() below - each
+//    mirrors one of StreamContext's startObject()/startArray()/onValue()
+//    branches). Correct by construction with respect to the pattern
+//    matcher for every selector shape (wildcards, '..', filters,
+//    project/drop) - this is the fallback for anything the specialized
+//    ChainEvaluator below can't compile.
+//  - ChainEvaluator: a compiled fast path for "definite pure-key chains"
+//    ($.k1.k2....kn - no wildcards/descendants/ancestor-filters), the
+//    common NDJSON case (e.g. `$.field2.nested`). O(selector length) per
+//    document instead of a full match() attempt at every node.
+//
+// Two divergences from the real engine are inherent to using JSON.parse
+// and are accepted, documented behavior for opt-in fastPath mode (see
+// YAJSOptions.fastPath in yajs.ts and the README):
+//  1. Duplicate keys in one object: the streaming engine emits a match per
+//     occurrence; JSON.parse keeps only the last.
+//  2. Integer-like key ordering: when raw text order differs from JS's
+//     own-property enumeration order for integer-like keys (Object.keys()),
+//     sibling match *emission order* can differ (values/paths unaffected).
 'use strict';
 
-const { YAJSPath } = require('../dist/main/lib/path/YAJSPath.js');
-const { StreamPosition } = require('../dist/main/lib/context/StreamPosition.js');
-const { PathOperator } = require('../dist/main/lib/path/PathOperator.js');
-const { ScriptFilterHelper } = require('../dist/main/lib/utils/ScriptFilterHelper.js');
+import { StreamPosition } from '../context/StreamPosition';
+import { ChildNode } from '../path/operator/ChildNode';
+import { PathOperator } from '../path/PathOperator';
+import { YAJSPath } from '../path/YAJSPath';
+import { ScriptFilterHelper } from '../utils/ScriptFilterHelper';
 
-function isPlainObject(v) {
+/** Minimal option surface the fast path evaluators need from YAJSOptions. */
+export interface FastPathOptions {
+    pathIncludeArrayIndex?: boolean;
+}
+
+export type EmitFn = (path: Array<string | number>, value: any) => void;
+
+export function isPlainObject(v: any): boolean {
     return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+export interface FastPathDocumentEvaluator {
+    walkDocument(value: any): void;
 }
 
 // ---------------------------------------------------------------------------
 // Generic walker
 // ---------------------------------------------------------------------------
 
-class GenericWalker {
-    // emit: (pathArray, value) => void
-    constructor(yajsPath, options, emit) {
-        this.path = yajsPath;
+export class GenericWalker implements FastPathDocumentEvaluator {
+
+    private readonly includeIdx: boolean;
+    private readonly dropSet: Set<string>;
+    private readonly hasDrop: boolean;
+    private readonly projectHelper: ScriptFilterHelper;
+    private readonly hasProject: boolean;
+    // node -> built (drop-stripped) value, for nested-match substitution
+    // (mirrors dispatcher value injection, issue #38).
+    private readonly builtByNode: Map<any, any>;
+    private position: StreamPosition;
+
+    constructor(private readonly path: YAJSPath, options: FastPathOptions, private readonly emitCb: EmitFn) {
         this.includeIdx = !!(options && options.pathIncludeArrayIndex);
-        this.emitCb = emit;
-        this.dropKeys = yajsPath.dropKeys || [];
-        this.hasDrop = this.dropKeys.length > 0;
-        this.dropSet = new Set(this.dropKeys);
-        this.projectHelper = new ScriptFilterHelper(
-            yajsPath.projectKeys, yajsPath.projectExpression);
+        const dropKeys = path.dropKeys || [];
+        this.hasDrop = dropKeys.length > 0;
+        this.dropSet = new Set(dropKeys);
+        this.projectHelper = new ScriptFilterHelper(path.projectKeys, path.projectExpression);
         this.hasProject = this.projectHelper.isFiltered();
-        // node -> built (drop-stripped) value, for nested-match
-        // substitution (mirrors dispatcher value injection, issue #38).
         this.builtByNode = this.hasDrop ? new Map() : null;
     }
 
-    // One top-level document (one NDJSON line).
-    walkDocument(value) {
+    // One top-level document (one NDJSON record).
+    walkDocument(value: any): void {
         this.position = new StreamPosition(this.includeIdx, !this.path.definite);
         if (this.hasDrop) { this.builtByNode.clear(); }
         if (isPlainObject(value)) {
@@ -56,31 +92,19 @@ class GenericWalker {
         } else if (Array.isArray(value)) {
             // StreamContext.startArray at a fresh boundary: no match for
             // the array itself (issue #14) - elements only.
-            this.walkRootArrayOpen();
+            this.position.stepIntoArray();
             for (let i = 0; i < value.length; i++) { this.element(value[i]); }
-            this.walkRootArrayClose();
+            this.position.stepOutArray();
         } else {
             // bare scalar at root: onValue -> isInRoot -> match(value)
             if (this.tryMatch()) { this.emitScalar(value); }
         }
     }
 
-    // Exposed separately so the top-level-array fast path can stream
-    // elements one at a time (parse each element text, call element()).
-    walkRootArrayOpen() {
-        if (!this.position) {
-            this.position = new StreamPosition(this.includeIdx, !this.path.definite);
-        }
-        this.position.stepIntoArray();
-    }
-    walkRootArrayClose() {
-        this.position.stepOutArray();
-    }
-
     // A value in an already-established slot (object key slot or array
     // elements slot). Mirrors StreamContext's startObject/startArray/
     // onValue dispatch for non-fresh positions.
-    element(v) {
+    private element(v: any): void {
         if (isPlainObject(v)) {
             // startObject, peek not ROOT: doOnValue -> match at current
             // position (before stepping in).
@@ -101,11 +125,11 @@ class GenericWalker {
             // scalar: onValue non-root branch: increaseArrayIndex, then
             // doOnValue -> peek().onValue -> match(value).
             this.position.increaseArrayIndex();
-            if (this.tryMatchViaPeek(true)) { this.emitScalar(v); }
+            if (this.tryMatchViaPeek()) { this.emitScalar(v); }
         }
     }
 
-    enterObject(v, matched) {
+    private enterObject(v: any, matched: boolean): void {
         const pos = this.position;
         pos.stepIntoObject();
         const keys = Object.keys(v);
@@ -118,28 +142,29 @@ class GenericWalker {
         if (matched) { this.emitNonScalar(v); }
     }
 
-    // match attempt as StreamContext.match does it. `viaPeek` mirrors
+    // match attempt as StreamContext.match does it. viaPeek mirrors
     // doOnValue(): Root.onValue is a no-op, so no attempt when the current
     // peek is Root (only reachable for root scalars, handled separately).
-    tryMatch() {
+    private tryMatch(): boolean {
         const d = this.position.pathDepth();
         if (this.path.definite || this.path.minimumDepth <= d) {
             return this.path.match(this.position);
         }
         return false;
     }
-    tryMatchViaPeek() {
+
+    private tryMatchViaPeek(): boolean {
         if (this.position.peek().getType() === PathOperator.Type.ROOT) { return false; }
         return this.tryMatch();
     }
 
-    emitScalar(v) {
+    private emitScalar(v: any): void {
         // scalars bypass project/drop entirely (issue #46 / dispatcher only
         // ever gates container values)
-        this.emitCb(this.position.path(), v);
+        this.emitCb(this.position.path(this.includeIdx), v);
     }
 
-    emitNonScalar(v) {
+    private emitNonScalar(v: any): void {
         const built = this.hasDrop ? this.buildWithDrop(v, true) : v;
         if (this.hasDrop) { this.builtByNode.set(v, built); }
         if (this.hasProject) {
@@ -147,7 +172,7 @@ class GenericWalker {
                 Object.prototype.hasOwnProperty.call(built, key));
             if (!ok) { return; }
         }
-        this.emitCb(this.position.path(), built);
+        this.emitCb(this.position.path(this.includeIdx), built);
     }
 
     // Reconstruct the value a dispatcher would have built when dropKeys are
@@ -156,7 +181,7 @@ class GenericWalker {
     // injects the inner dispatcher's completed - already-stripped - value
     // into the suspended ancestor, so the ancestor's emission carries the
     // stripped inner subtree too).
-    buildWithDrop(v, isMatchRoot) {
+    private buildWithDrop(v: any, isMatchRoot: boolean): any {
         if (v === null || typeof v !== 'object') { return v; }
         if (!isMatchRoot && this.builtByNode.has(v)) { return this.builtByNode.get(v); }
         if (Array.isArray(v)) {
@@ -164,7 +189,7 @@ class GenericWalker {
             for (let i = 0; i < v.length; i++) { out[i] = this.buildWithDrop(v[i], false); }
             return out;
         }
-        const out = {};
+        const out: any = {};
         const keys = Object.keys(v);
         for (let i = 0; i < keys.length; i++) {
             const k = keys[i];
@@ -180,16 +205,16 @@ class GenericWalker {
 
 // ---------------------------------------------------------------------------
 // Compiled chain evaluator ($.k1.k2...kn - definite, no wildcard, no
-// filters; project/drop allowed at the end). Returns null if the selector
-// is not chain-compilable.
+// filters; project/drop allowed at the end). compile() returns null if the
+// selector isn't chain-compilable, in which case compileFastPathEvaluator()
+// below falls back to GenericWalker.
 // ---------------------------------------------------------------------------
 
-class ChainEvaluator {
-    static compile(yajsPath, options, emit) {
-        // Inspect the compiled operator stack: must be Root + ChildNodes
-        // only, none filtered.
-        const stack = yajsPath['mStack'].stack; // private access, prototype only
-        const keys = [];
+export class ChainEvaluator implements FastPathDocumentEvaluator {
+
+    static compile(yajsPath: YAJSPath, options: FastPathOptions, emit: EmitFn): ChainEvaluator | null {
+        const stack = yajsPath.operators();
+        const keys: string[] = [];
         for (let i = 0; i < stack.length; i++) {
             const op = stack[i];
             const t = op.getType();
@@ -198,28 +223,32 @@ class ChainEvaluator {
                 continue;
             }
             if (t !== PathOperator.Type.OBJECT) { return null; }
-            if (op.filtered) { return null; }
-            keys.push(op.key);
+            if ((op as ChildNode).filtered) { return null; }
+            keys.push((op as ChildNode).key);
         }
         return new ChainEvaluator(yajsPath, keys, options, emit);
     }
 
-    constructor(yajsPath, keys, options, emit) {
-        this.keys = keys;
+    private readonly includeIdx: boolean;
+    private readonly dropSet: Set<string>;
+    private readonly hasDrop: boolean;
+    private readonly projectHelper: ScriptFilterHelper;
+    private readonly hasProject: boolean;
+    private readonly constPath: string[];
+
+    private constructor(yajsPath: YAJSPath, private readonly keys: string[],
+                         options: FastPathOptions, private readonly emitCb: EmitFn) {
         this.includeIdx = !!(options && options.pathIncludeArrayIndex);
-        this.emitCb = emit;
-        this.dropKeys = yajsPath.dropKeys || [];
-        this.hasDrop = this.dropKeys.length > 0;
-        this.dropSet = new Set(this.dropKeys);
-        this.projectHelper = new ScriptFilterHelper(
-            yajsPath.projectKeys, yajsPath.projectExpression);
+        const dropKeys = yajsPath.dropKeys || [];
+        this.hasDrop = dropKeys.length > 0;
+        this.dropSet = new Set(dropKeys);
+        this.projectHelper = new ScriptFilterHelper(yajsPath.projectKeys, yajsPath.projectExpression);
         this.hasProject = this.projectHelper.isFiltered();
-        this.simple = !this.hasDrop && !this.hasProject && !this.includeIdx;
-        // Pre-build the (constant, when !includeIdx) emission path.
+        // Pre-built (constant, when !includeIdx) emission path.
         this.constPath = keys.slice();
     }
 
-    walkDocument(value) {
+    walkDocument(value: any): void {
         if (this.includeIdx) {
             this.step(value, 0, []);
         } else {
@@ -227,33 +256,11 @@ class ChainEvaluator {
         }
     }
 
-    // Element of a TOP-LEVEL ARRAY (the "array is comma-NDJSON" fast
-    // path). NOT equivalent to walkDocument: the root array has already
-    // consumed the one level of array transparency, so an element that is
-    // itself an array is opaque (never further flattened, and for `$` it
-    // is the emitted unit itself), and an element object may start the
-    // chain directly.  elemIdx used only when pathIncludeArrayIndex.
-    walkElement(el, elemIdx) {
-        const trail = this.includeIdx ? [elemIdx] : null;
-        if (this.keys.length === 0) {
-            // `$`: each element of the matched root array is emitted whole
-            this.emitOne(el, this.includeIdx ? [] : null, this.includeIdx ? elemIdx : -1);
-            return;
-        }
-        if (isPlainObject(el)) {
-            if (this.includeIdx) {
-                this.step(el, 0, trail);
-            } else {
-                this.stepNoIdx(el, 0);
-            }
-        }
-        // array or scalar element: dead end for a non-empty key chain
-    }
-
-    // Fast variant: no array indices in paths -> the path is constant.
-    stepNoIdx(v, i) {
+    // Fast variant: no array indices in paths -> the emitted path is
+    // constant (this.constPath), so no trail needs to be threaded through.
+    private stepNoIdx(v: any, i: number): void {
         for (;;) {
-            if (i === this.keys.length) { return this.terminal(v, null); }
+            if (i === this.keys.length) { this.terminal(v, null); return; }
             if (isPlainObject(v)) {
                 const k = this.keys[i];
                 if (!Object.prototype.hasOwnProperty.call(v, k)) { return; }
@@ -266,8 +273,7 @@ class ChainEvaluator {
                 const k = this.keys[i];
                 for (let j = 0; j < v.length; j++) {
                     const el = v[j];
-                    if (isPlainObject(el) &&
-                        Object.prototype.hasOwnProperty.call(el, k)) {
+                    if (isPlainObject(el) && Object.prototype.hasOwnProperty.call(el, k)) {
                         this.stepNoIdx(el[k], i + 1);
                     }
                 }
@@ -277,12 +283,12 @@ class ChainEvaluator {
         }
     }
 
-    // Path-tracking variant (pathIncludeArrayIndex): idxTrail collects the
-    // interleaved segments (keys and indices) exactly as StreamPosition
-    // would - a key contributes when settled, an array level contributes
-    // its element index.
-    step(v, i, trail) {
-        if (i === this.keys.length) { return this.terminal(v, trail); }
+    // Path-tracking variant (pathIncludeArrayIndex): trail collects the
+    // interleaved segments exactly as StreamPosition would - a key
+    // contributes when settled, an array level contributes its element
+    // index.
+    private step(v: any, i: number, trail: Array<string | number>): void {
+        if (i === this.keys.length) { this.terminal(v, trail); return; }
         if (isPlainObject(v)) {
             const k = this.keys[i];
             if (!Object.prototype.hasOwnProperty.call(v, k)) { return; }
@@ -295,8 +301,7 @@ class ChainEvaluator {
             const k = this.keys[i];
             for (let j = 0; j < v.length; j++) {
                 const el = v[j];
-                if (isPlainObject(el) &&
-                    Object.prototype.hasOwnProperty.call(el, k)) {
+                if (isPlainObject(el) && Object.prototype.hasOwnProperty.call(el, k)) {
                     trail.push(j, k);
                     this.step(el[k], i + 1, trail);
                     trail.pop(); trail.pop();
@@ -306,7 +311,7 @@ class ChainEvaluator {
         }
     }
 
-    terminal(v, trail) {
+    private terminal(v: any, trail: Array<string | number>): void {
         if (Array.isArray(v)) {
             // matched array streams its elements (issue #14), exactly one
             // level; elements that are themselves arrays/objects are
@@ -319,17 +324,17 @@ class ChainEvaluator {
         this.emitOne(v, trail, -1);
     }
 
-    emitOne(v, trail, idx) {
+    private emitOne(v: any, trail: Array<string | number>, idx: number): void {
         let out = v;
         if (v !== null && typeof v === 'object') {
             if (this.hasDrop && isPlainObject(v)) {
-                const stripped = {};
+                const stripped: any = {};
                 const keys = Object.keys(v);
                 for (let i = 0; i < keys.length; i++) {
                     const k = keys[i];
                     if (this.dropSet.has(k)) { continue; }
                     Object.defineProperty(stripped, k, {
-                        value: v[k], writable: true, enumerable: true, configurable: true,
+                        value: (v as any)[k], writable: true, enumerable: true, configurable: true,
                     });
                 }
                 out = stripped;
@@ -340,7 +345,7 @@ class ChainEvaluator {
                 if (!ok) { return; }
             }
         }
-        let path;
+        let path: Array<string | number>;
         if (!this.includeIdx) {
             path = this.constPath.slice();
         } else {
@@ -355,16 +360,14 @@ class ChainEvaluator {
 // Front door: compile a selector into the best evaluator.
 // ---------------------------------------------------------------------------
 
-function compileFastPath(selector, options, emit) {
-    const yajsPath = YAJSPath.parse(selector);
+export interface CompiledFastPath {
+    evaluator: FastPathDocumentEvaluator;
+    kind: 'chain' | 'generic';
+}
+
+export function compileFastPathEvaluator(yajsPath: YAJSPath, options: FastPathOptions,
+                                          emit: EmitFn): CompiledFastPath {
     const chain = ChainEvaluator.compile(yajsPath, options, emit);
-    if (chain) { return { evaluator: chain, kind: 'chain', yajsPath }; }
-    return { evaluator: new GenericWalker(yajsPath, options, emit), kind: 'generic', yajsPath };
+    if (chain) { return { evaluator: chain, kind: 'chain' }; }
+    return { evaluator: new GenericWalker(yajsPath, options, emit), kind: 'generic' };
 }
-
-function genericOnly(selector, options, emit) {
-    const yajsPath = YAJSPath.parse(selector);
-    return { evaluator: new GenericWalker(yajsPath, options, emit), kind: 'generic', yajsPath };
-}
-
-module.exports = { GenericWalker, ChainEvaluator, compileFastPath, genericOnly, isPlainObject };

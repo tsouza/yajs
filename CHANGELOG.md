@@ -65,6 +65,7 @@ were found and fixed. Issue/PR links: [issues](https://github.com/tsouza/yajs/is
 
 - O(depth²) time blowup in descendant (`..`) matching against deeply nested documents — [#34](https://github.com/tsouza/yajs/issues/34), [PR #43](https://github.com/tsouza/yajs/pull/43)
 - Reduced per-match path-materialization cost (O(depth) per match, compounding across matches) — [#44](https://github.com/tsouza/yajs/issues/44), [PR #47](https://github.com/tsouza/yajs/pull/47)
+- New opt-in `fastPath` option: a `JSON.parse`-based fast path for NDJSON input, ~5x faster for the common definite-key-chain selector shape — [#78](https://github.com/tsouza/yajs/issues/78)
 
 ### Packaging & types
 
