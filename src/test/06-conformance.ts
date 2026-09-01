@@ -221,7 +221,7 @@ describe('JSON conformance (nst/JSONTestSuite corpus) - n_ (must reject)', () =>
         const reason = gapReason(file, KNOWN_N_GAPS);
         const itFn = reason ? it.fails : it;
         itFn(reason ? `rejects ${file} [KNOWN GAP: ${reason}]` : `rejects ${file}`, async () => {
-            const { errors } = await run(file);
+            const { errors, dataEmittedAfterFirstError } = await run(file);
             // Don't assert exact error text (over-fitting) - only that the
             // parser recognized the input as invalid. run() itself is what
             // guards against "spinning or hanging with no signal": it always
@@ -229,6 +229,25 @@ describe('JSON conformance (nst/JSONTestSuite corpus) - n_ (must reject)', () =>
             // cap, so reaching this assertion at all already proves the
             // stream settled rather than hanging.
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
+            // A regression where the parser rejects a document AND ALSO
+            // keeps emitting 'data' events for it - after already having
+            // reported it invalid - would otherwise pass this whole loop
+            // undetected, since the assertion above only ever looks at
+            // `errors`. NOT a blanket "zero data" assertion, deliberately:
+            // investigated first (45 of these 188 n_ fixtures genuinely emit
+            // legitimate `values` BEFORE their error - e.g. real earlier
+            // array elements ahead of a later syntax error, like
+            // n_array_unclosed_with_new_lines.json's `[1,1,1` - so requiring
+            // zero data across the board would fail on every one of them for
+            // correct behavior, not a bug). Restricting the check to data
+            // seen AFTER the first error keeps that legitimate case passing
+            // while still catching the actual bug class this guards against,
+            // generalizing 04-error-handling.ts's own "no stale data emitted
+            // after an error" tests (which assert zero total data, valid
+            // there only because those fixtures' entire document is a single
+            // value with nothing legitimate to emit at all) to fixtures that
+            // do have real data ahead of their error.
+            expect(dataEmittedAfterFirstError, 'expected no data emitted after the first error').to.equal(false);
         }, LARGE_FIXTURES.has(file) ? 8000 : 3000);
     }
 });
@@ -273,66 +292,66 @@ describe('JSON conformance (nst/JSONTestSuite corpus) - i_ (implementation-defin
 // --------------------------------------------------------------------
 describe('structural grammar validation regressions (issue #11)', () => {
     it('rejects a missing comma between array elements ([1 true])', () =>
-        runToSettled('n_array_1_true_without_comma.json').then((errors) => {
+        runToSettledConformance('n_array_1_true_without_comma.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a missing comma between object entries ({"x", null})', () =>
-        runToSettled('n_object_comma_instead_of_colon.json').then((errors) => {
+        runToSettledConformance('n_object_comma_instead_of_colon.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a trailing comma before a closing bracket ({"id":0,})', () =>
-        runToSettled('n_object_trailing_comma.json').then((errors) => {
+        runToSettledConformance('n_object_trailing_comma.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a double comma between array elements ([1,,2])', () =>
-        runToSettled('n_array_double_comma.json').then((errors) => {
+        runToSettledConformance('n_array_double_comma.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a missing colon after an object key ({"a" "b"})', () =>
-        runToSettled('n_object_no-colon.json').then((errors) => {
+        runToSettledConformance('n_object_no-colon.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a non-string object key ({1:1})', () =>
-        runToSettled('n_object_non_string_key.json').then((errors) => {
+        runToSettledConformance('n_object_non_string_key.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a disallowed leading zero ([012])', () =>
-        runToSettled('n_number_with_leading_zero.json').then((errors) => {
+        runToSettledConformance('n_number_with_leading_zero.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a disallowed leading zero on a negative number ([-012])', () =>
-        runToSettled('n_number_neg_int_starting_with_zero.json').then((errors) => {
+        runToSettledConformance('n_number_neg_int_starting_with_zero.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects garbage immediately following a complete array ([1]] / [][])', () =>
         Promise.all([
-            runToSettled('n_array_extra_close.json'),
-            runToSettled('n_structure_double_array.json'),
+            runToSettledConformance('n_array_extra_close.json'),
+            runToSettledConformance('n_structure_double_array.json'),
         ]).then(([extraClose, doubleArray]) => {
             expect(extraClose.length, 'expected at least one error event').to.be.greaterThan(0);
             expect(doubleArray.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a close bracket with nothing open to close (])', () =>
-        runToSettled('n_structure_close_unopened_array.json').then((errors) => {
+        runToSettledConformance('n_structure_close_unopened_array.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects a stream that ends while a structure is still open ({"a":"a")', () =>
-        runToSettled('n_structure_unclosed_object.json').then((errors) => {
+        runToSettledConformance('n_structure_unclosed_object.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
     it('rejects an empty/whitespace-only document (a single space)', () =>
-        runToSettled('n_single_space.json').then((errors) => {
+        runToSettledConformance('n_single_space.json').then((errors) => {
             expect(errors.length, 'expected at least one error event').to.be.greaterThan(0);
         }));
 
@@ -387,7 +406,11 @@ describe('structural grammar validation regressions (issue #11)', () => {
 // Collects every 'error' event a corpus fixture produces, the same way the
 // generic n_ loop above does (via run()/runSettled()), but as a plain
 // array instead of the full RunResult - convenient for the dedicated,
-// single-assertion regressions above.
-function runToSettled(file: string): Promise<Error[]> {
+// single-assertion regressions above. Named runToSettledConformance (not the
+// more obvious runToSettled) specifically to avoid colliding with
+// 04-error-handling.ts's own, differently-shaped runToSettled() (different
+// defaults, different fixture-directory assumptions) - two functions with
+// the same name in different files is an easy trap for a future reader/grep.
+function runToSettledConformance(file: string): Promise<Error[]> {
     return run(file).then((result) => result.errors);
 }
