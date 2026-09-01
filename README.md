@@ -317,9 +317,13 @@ complete no-op: identical output to matching `$..a` has always produced.
 > before; only a descendant selector ending in a plain key (`$..a`,
 > `$.x..a`, `$..[f]a`, …) defaults to innermost-only.
 >
-> The opt-in NDJSON fast path (`fastPath: true`, below) does not implement
-> this: it still emits every overlapping match for a self-nesting document,
-> a known, documented divergence from the default engine's behavior.
+> The opt-in NDJSON fast path (`fastPath: true`/`'line'`, below) does not
+> implement this: it still emits every overlapping match for a self-nesting
+> document, a known, documented divergence from the default engine's
+> behavior. The newer `fastPath: 'hybrid'` span-parsing mode (see
+> [SKIP/PARSE/DESCEND span-parsing hybrid fast path](#skipparsedescend-span-parsing-hybrid-fast-path-opt-in)
+> below) implements innermost-only natively and matches the default
+> engine exactly here, for the selector shapes it supports.
 
 ### Project: `<key>{<keys filter>}`
 
@@ -396,9 +400,10 @@ side uses a regex primitive.
 Option                    | Type    | Default | Description
 --------------------------|---------|---------|------------
 `pathIncludeArrayIndex`   | boolean | `false` | Include array indices (as numbers) in each emitted chunk's `path`
-`fastPath`                | boolean | `false` | Opt-in fast path — see [NDJSON fast path](#ndjson-fast-path-opt-in) and [Array-splitter fast path](#array-splitter-fast-path-opt-in) below
-`fastPathMode`            | `'ndjson'` \| `'array'` | `'ndjson'` | Which shape `fastPath` assumes — see below
-`fastPathMaxRecordBytes`  | number  | `8388608` (8 MiB) | Per-record (or, under `fastPathMode: 'array'`, per-element) size cutoff for `fastPath` — see below
+`fastPath`                | `boolean \| 'line' \| 'hybrid'` | `false` | Opt-in fast path — `true`/`'line'` selects [NDJSON fast path](#ndjson-fast-path-opt-in) (see also [Array-splitter fast path](#array-splitter-fast-path-opt-in), selected via `fastPathMode` below); `'hybrid'` selects the [SKIP/PARSE/DESCEND span-parsing hybrid](#skipparsedescend-span-parsing-hybrid-fast-path-opt-in) for the selectors it supports (falling back to `'line'` for the rest)
+`fastPathMode`            | `'ndjson'` \| `'array'` | `'ndjson'` | Which input shape `fastPath: 'line'`/`true` assumes — see [Array-splitter fast path](#array-splitter-fast-path-opt-in) below
+`fastPathMaxRecordBytes`  | number  | `8388608` (8 MiB) | Per-record (or, under `fastPathMode: 'array'`, per-element) size cutoff for `fastPath: 'line'`/`true` — see below
+`hybridMaxSpanBytes`      | number  | `8388608` (8 MiB) | Per-matched-span size cutoff for `fastPath: 'hybrid'` — see below
 
 ```js
 const yajs = require('yajson-stream');
@@ -468,12 +473,14 @@ Only matter if your data can actually contain them:
 
 ### What's deferred
 
-Per issue #78's own recommended build order, this shipped the "line/chain
-fast path" first, with the array splitter following in issue #86 (see
-[Array-splitter fast path](#array-splitter-fast-path-opt-in) below). The full
-span-parsing hybrid engine (which also solves the "one huge record in an
-otherwise-small-record stream" memory case more directly) remains deferred to
-future work — see the issue for details.
+Per issue #78's own recommended build order (line/chain fast path, then
+the array splitter, then the full span-parsing hybrid engine), all three
+steps have now shipped: the [line/chain fast path](#ndjson-fast-path-opt-in)
+above (issue #78), the [array-splitter fast path](#array-splitter-fast-path-opt-in)
+below (issue #86), and the
+[SKIP/PARSE/DESCEND span-parsing hybrid](#skipparsedescend-span-parsing-hybrid-fast-path-opt-in)
+further below (issues #79/#87). Nothing from that build order remains
+deferred.
 
 ## Array-splitter fast path (opt-in)
 
@@ -528,6 +535,130 @@ confirming the whole box was under contention that run, not something
 specific to this mode) — see
 [issue #86](https://github.com/tsouza/yajs/issues/86) for the full
 investigation.
+
+## SKIP/PARSE/DESCEND span-parsing hybrid fast path (opt-in)
+
+`{ fastPath: 'hybrid' }` (issues [#79](https://github.com/tsouza/yajs/issues/79)/[#87](https://github.com/tsouza/yajs/issues/87))
+is a second, newer fast path alongside the line/chain one above, built
+specifically for **descendant-shaped** selectors — `$..plugins`,
+`$..array.deep1`, any `$..k1.k2...kn` chain. Instead of materializing a
+whole record via `JSON.parse` and then walking the result (what `'line'`
+mode does), it navigates a record's raw bytes directly to the matched
+value(s) — skipping past everything else in the record without tokenizing
+or materializing it — and `JSON.parse`s only the exact bytes of an actual
+match:
+
+```js
+const stream = yajs('$..plugins', { fastPath: 'hybrid' });
+```
+
+### Why a separate mode instead of extending `'line'`
+
+`'line'` mode's own design (splitting on `\n`, then one `JSON.parse` call
+per record) is a great fit for a **definite** key chain like
+`$.field2.nested` — there's nothing to skip past that JSON.parse wouldn't
+build anyway. It stops being the right model for a **descendant**
+selector on a record where the match is a small fraction of the record's
+bytes: `'line'` mode still has to materialize the *entire* record as JS
+objects before it can even start walking it for `$..plugins`. The hybrid
+evaluator's own selector compiler (`compileHybridPlan()` in
+`src/main/lib/fastpath/HybridSpanEvaluator.ts`) only recognizes this one
+shape — no wildcards, no ancestor-key filters, no second `..`, no
+definite prefix before the `..`, no `pathIncludeArrayIndex`, no
+project/drop-keys (yet) — and a selector outside that shape transparently
+behaves exactly like `'line'` mode instead (falls back wholesale, see
+`HybridFastPath.ts`), including `'line'` mode's own documented
+divergences for those shapes. A **plain definite chain** (`$.field2.nested`,
+no `..` at all) *also* falls back to `'line'` mode rather than being
+reimplemented here — for that shape `'line'` mode's own `JSON.parse` +
+chain-navigation already gets the same benefit a byte-level walk would,
+so there's nothing to gain from a second implementation of it.
+
+### The "whale record" case
+
+Unlike `fastPathMaxRecordBytes` (which routes an entire oversized *record*
+to the real engine), the hybrid evaluator never needs to buffer a whole
+record at all — it only ever buffers the bytes of an actual matched value
+(and small bookkeeping around it). A record can be arbitrarily large — one
+single, multi-gigabyte top-level JSON document — and still get the full
+speedup, as long as no individual *match* within it is unreasonably large.
+`hybridMaxSpanBytes` (default 8 MiB, same default as
+`fastPathMaxRecordBytes`) bounds that one thing: a record with even one
+matched value over the cutoff falls back to the real streaming engine for
+the rest of the stream (same "correctness over speed when ambiguous"
+philosophy as `fastPathMaxRecordBytes` — see `HybridFastPath.ts`'s own
+comments for exactly what triggers this and why there's no attempt to
+resync and resume, unlike `'line'` mode's per-record resync).
+
+One latency note for a stream shaped like this — one single enormous
+top-level value, not many small NDJSON records: matches found within it
+are emitted only once that whole top-level value's own closing
+bracket is reached, not incrementally as each one is found. This is what
+keeps a bailout partway through correct (an earlier match in the same
+record is never emitted twice — once by the hybrid evaluator, once more
+by the real engine reprocessing that same record after a fallback), at
+the cost of holding each match's own bytes (not the record's) in memory
+until then. For every dataset this repo benchmarks — including the
+single-top-level-object "whale record" shape — total match volume per
+record stays small enough that this is a non-issue in practice; it would
+only matter for a record whose total *matched* content (not its overall
+size) is itself extremely large.
+
+### Issue #89 (self-nesting) is implemented natively, not via fallback
+
+Unlike `'line'` mode's `GenericWalker` (which has no notion of "this match
+was superseded by a deeper one" — see the divergence documented above),
+the hybrid evaluator resolves self-nesting matches exactly like the
+default engine: for every candidate match, it checks whether the *same*
+target key occurs again anywhere inside that match's own value, and if so
+emits only the deeper occurrence(s) — see `HybridSpanEvaluator.ts`'s own
+design notes for why this turned out to be cheap and natural to implement
+directly (once a match's byte span is known, checking it for a nested
+occurrence is just another scoped scan) rather than falling back to the
+real engine for descendant selectors the way issue #89's own writeup
+sanctioned as an acceptable simplification.
+
+### Performance
+
+Measured against this repo's own bench datasets (`src/bench/data`, see
+[benchmark.md](benchmark.md) for full methodology and raw per-pair
+numbers) — median of several interleaved-with-baseline paired runs, CPU
+time, on a shared/loaded machine (reference only, like the rest of this
+README's numbers - re-run locally for a number you can rely on):
+
+Dataset/input | Selector | Shape | Median CPU speedup vs. the default engine
+:------------:|----------|-------|:---:
+1 | `$.field2.nested` | definite chain (no `..` — delegates to `'line'` mode) | ~2.3x
+2 | `$..plugins` | high-selectivity descendant, real data (flagship shape) | ~3.2x
+4 | `$..array.deep1` | descendant + suffix chain, but **low selectivity** for this specific dataset (see below) | ~0.85x (no win)
+synthetic "whale record" | `$..plugins` | high-selectivity descendant, one huge top-level object, 1-in-50 fields match | ~5.1x
+
+**The honest finding, not the spike's number restated:** dataset 4's own
+`$..array.deep1` selector turns out to match *almost every* record in that
+dataset (its own generator nests a `plugins`-shaped payload under nearly
+all of it) — the opposite of what "dense-scalar-match" suggested going in.
+Low selectivity means there's little for the SKIP side of SKIP/PARSE/DESCEND
+to actually skip, so this production implementation - which does
+correctness work (issue #89 self-nesting checks, chunk-crossing safety,
+per-record atomicity) the throwaway go/no-go spike's own 2.64x-on-this-shape
+number never had to pay for - lands at roughly no win at all for *this*
+dataset, not a speedup. This is real, differentially-verified output (see
+`src/test/13-hybrid-fastpath.ts` and benchmark.md), not a regression from
+a bug - see benchmark.md's own section for the numbers and the synthetic
+high-selectivity "whale record" benchmark (`gen-whale.js`-shaped: one
+huge top-level object, most fields irrelevant, a small fraction containing
+the matched key nested a few levels down) built specifically to verify the
+architecture's actual target case in isolation from dataset 4's own
+particular content - **~5.1x**, consistent with dataset 2's own
+high-selectivity number. The takeaway: this feature's real win tracks
+selectivity, not "is the selector shaped like `$..a.b`" - use it for
+descendant selectors that are genuinely selective (most records/subtrees
+don't match), and don't expect a win (though never a wrong answer) for
+one that matches nearly everything.
+
+Dataset 1's shape gets no additional benefit over `'line'` mode (see "Why
+a separate mode" above) - its number here is `'line'` mode's own,
+inherited via fallback.
 
 ## Non-standard extensions
 
