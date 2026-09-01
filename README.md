@@ -177,6 +177,55 @@ $ echo '{"a":[{"key1":{"child":"v1"}},{"key3":{"child":"v3"}}]}' | yajs '$..[key
 "v1"
 ```
 
+### Self-nesting descendant matches: innermost by default
+
+`$..a` finds `a` at any depth. When a document's `a` nests **inside
+another `a`** — comment threads, category trees, folder structures — only
+the **innermost** occurrence is emitted by default:
+
+```bash
+$ echo '{"a":{"b":{"a":{"c":1}}}}' | yajs '$..a'
+{"c":1}
+```
+
+The outer `a` (`{"b":{"a":{"c":1}}}`) is not emitted. This is a deliberate
+default, not a filter you opt into — `$..a` still parses exactly as
+before, only its *output* for a self-nesting document changed. Two `a`
+matches that are **not** nested in each other (disjoint branches, or
+siblings in an array) are completely unaffected and are both still
+emitted:
+
+```bash
+$ echo '{"p":{"a":{"a":1}},"q":{"a":2}}' | yajs '$..a'
+1
+2
+```
+
+For any document where the matched key never actually nests inside itself
+— the overwhelming majority of real-world `..` usage — this default is a
+complete no-op: identical output to matching `$..a` has always produced.
+
+> **Behavior change (2.x)**: versions of this repository before this
+> change emitted **both** the outer and the inner occurrence for a
+> self-nesting `$..a` match (issue #38's "matches inside matches"
+> handling). If your selector's target key can nest inside itself and you
+> relied on seeing every overlapping occurrence, that output has changed —
+> see [ARCHITECTURE.md §4](ARCHITECTURE.md#4-the-recorder--libdispatcher-and-libcontextstreamcontextts)
+> for the mechanism and [CHANGELOG.md](CHANGELOG.md) for this entry. There
+> is currently no selector syntax to opt back into the old "emit every
+> overlapping match" behavior for a named-key descendant selector — an
+> explicit `outermost` opt-in was considered and deliberately descoped
+> (see issue #89).
+>
+> This does **not** apply to a wildcard-terminated descendant selector
+> (`$..*`, `$.*.*`, …) — those keep matching at every level, exactly as
+> before; only a descendant selector ending in a plain key (`$..a`,
+> `$.x..a`, `$..[f]a`, …) defaults to innermost-only.
+>
+> The opt-in NDJSON fast path (`fastPath: true`, below) does not implement
+> this: it still emits every overlapping match for a self-nesting document,
+> a known, documented divergence from the default engine's behavior.
+
 ### Project: `<key>{<keys filter>}`
 
 Emits the matched object only if the filter over its **top-level keys**
@@ -288,14 +337,13 @@ streaming engine `fastPath: false` uses, including issue #50's per-record
 error-and-resync behavior. Only that one record pays the slower cost; the
 fast path resumes normally for the records after it.
 
-### Two accepted differences from the default engine
+### Three accepted differences from the default engine
 
-Both are inherent to using `JSON.parse` under the hood, not implementation
-bugs, and only matter if your data can actually contain them:
+Only matter if your data can actually contain them:
 
 1. **Duplicate object keys.** The default engine emits one match per
    occurrence of a duplicated key; `fastPath` (via `JSON.parse`) keeps only
-   the last occurrence.
+   the last occurrence. Inherent to using `JSON.parse` under the hood.
 2. **Integer-like key emission order.** `JSON.parse`'s objects always
    enumerate integer-like keys first, in ascending order, ahead of string
    keys — regardless of their order in the source text (this is standard
@@ -303,7 +351,15 @@ bugs, and only matter if your data can actually contain them:
    text key order differs from that enumeration order, `fastPath` emits that
    object's sibling matches in the *enumeration* order instead of the raw
    text order. Values and paths are unaffected — only the order matches
-   arrive in can differ.
+   arrive in can differ. Also inherent to using `JSON.parse`.
+3. **Self-nesting descendant matches (issue #89).** The default engine's
+   `$..a`-shaped selectors are innermost-only for a self-nesting document
+   (see "Self-nesting descendant matches" above); `fastPath`'s walker has no
+   notion of "this match was superseded by a deeper one" and still emits
+   every overlapping match, the *pre-#89* behavior. Unlike the two above,
+   this isn't inherent to `JSON.parse` — it's a known scoping gap in
+   `fastPath`'s own matcher, tracked separately rather than fixed as part of
+   #89.
 
 ### What's deferred
 

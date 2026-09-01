@@ -53,8 +53,16 @@ describe('NDJSON fast path (opt-in, issue #78)', () => {
             ['project with boolean expression', '$.a{!x}',
                 '{"a":{"x":1}}\n{"a":{"y":2}}\n'],
             ['drop keys at chain terminus', '$<b>', '{"a":1,"b":2,"c":3}\n'],
-            ['drop keys with nested match substitution (issue #38)', '$..a<b>',
-                '{"a":{"b":1,"c":{"a":{"b":2,"d":3}}}}\n'],
+            // NOT '$..a<b>' against a self-nesting "a" here (issue #38's
+            // original repro for this row) - since issue #89, that shape is
+            // one of the two documented semantic divergences below instead
+            // (GenericWalker doesn't implement innermost-only), so it can no
+            // longer sit in this "must match" list. A NON-self-nesting drop-
+            // keys-through-descendant case still belongs here, to keep this
+            // row's original coverage (drop keys applied to a descendant
+            // match) for the case that ISN'T affected by #89.
+            ['drop keys through a descendant match, no self-nesting (issue #38)', '$..a<b>',
+                '{"x":{"a":{"b":1,"c":2}}}\n'],
             ['root selector, whole-document match', '$', '{"a":1,"b":[1,2]}\n'],
             ['root array (comma-NDJSON framing)', '$', '[1,2,3]\n'],
             ['bare scalar records at the root', '$', '42\n"str"\ntrue\nfalse\nnull\n'],
@@ -97,10 +105,12 @@ describe('NDJSON fast path (opt-in, issue #78)', () => {
 
     // The two divergences issue #78 documents as accepted, inherent to
     // using JSON.parse instead of the byte-by-byte SAX tokenizer - see
-    // YAJSOptions.fastPath's doc comment in yajs.ts and the README. These
-    // assert the SPECIFIC documented-different behavior (not merely "the
-    // two engines disagree"), so a future change that alters exactly how
-    // they disagree is caught too.
+    // YAJSOptions.fastPath's doc comment in yajs.ts and the README - plus
+    // one more added by issue #89 (GenericWalker not implementing
+    // innermost-only self-nesting semantics - see its own test below).
+    // These assert the SPECIFIC documented-different behavior (not merely
+    // "the two engines disagree"), so a future change that alters exactly
+    // how they disagree is caught too.
     describe('documented semantic divergences (accepted, not bugs)', () => {
         it('duplicate object keys: the default engine emits one match per occurrence; fastPath keeps only the last (JSON.parse semantics)', () =>
             Promise.all([
@@ -124,6 +134,32 @@ describe('NDJSON fast path (opt-in, issue #78)', () => {
                 ]);
                 // Same values/paths overall - order is genuinely the only difference.
                 expect(fast.out.map((e) => e.path)).to.have.deep.members(real.out.map((e) => e.path));
+            }));
+
+        // NEW divergence introduced by issue #89 (innermost-only default
+        // for a self-nesting descendant match - see StreamContext's
+        // innermostOnDescendantKey field comment and ARCHITECTURE.md §4):
+        // GenericWalker (this file's header comment; FastPathEvaluator.ts)
+        // evaluates each node independently against an already-JSON.parse'd
+        // tree and has NO notion of "an outer match was superseded by a
+        // deeper one" at all - it still emits every overlapping match, i.e.
+        // exactly the real engine's OLD (pre-#89) behavior. Deliberately
+        // out of scope to fix here (see issue #89's own PR description) -
+        // this test exists so the divergence is pinned and visible instead
+        // of silently missing, per that PR's own documentation requirement.
+        // A tracking issue for unifying this is linked from the PR.
+        it('self-nesting descendant match (issue #89): the real engine is innermost-only, fastPath still emits every overlapping match (KNOWN divergence, not yet unified)', () =>
+            Promise.all([
+                run('$..a', '{"a":{"b":{"a":{"c":1}}}}\n', { fastPath: false }),
+                run('$..a', '{"a":{"b":{"a":{"c":1}}}}\n', { fastPath: true }),
+            ]).then(([real, fast]) => {
+                expect(real.out).to.deep.equal([
+                    { path: ['a', 'b', 'a'], value: { c: 1 } },
+                ]);
+                expect(fast.out).to.deep.equal([
+                    { path: ['a', 'b', 'a'], value: { c: 1 } },
+                    { path: ['a'], value: { b: { a: { c: 1 } } } },
+                ]);
             }));
     });
 
