@@ -3,13 +3,29 @@
 [![CI](https://github.com/tsouza/yajs/actions/workflows/ci.yml/badge.svg)](https://github.com/tsouza/yajs/actions/workflows/ci.yml)
 [![NPM version](https://img.shields.io/npm/v/yajson-stream.svg)](https://www.npmjs.com/package/yajson-stream)
 
-YAJS is a tool for filtering a portion of json files.
+YAJS filters JSON **as it streams**: point it at a file of any size — or an
+endless NDJSON feed — give it a jsonpath-like selector, and get each matched
+value the moment it goes by. The document is never loaded into memory; only
+the current nesting depth and the values you actually matched are.
+
+- **Constant memory** — kilobytes of state for multi-gigabyte inputs
+- **jsonpath-like selectors** — wildcards, recursive descent (`..`),
+  path filters, projection, key dropping
+- **Library and CLI** — a Node stream you `pipe()` through, or a shell
+  one-liner
+- **NDJSON-native** — multiple documents per stream, with per-record error
+  recovery (one bad line doesn't kill the rest)
+- **TypeScript types** included (`YAJSChunk`, `YAJSOptions`)
 
 ## Motivation
 
-The reason I built this tool is that I could not find a proper json stream processor with the features I needed without sacrificing speed and memory.
+The reason I built this tool is that I could not find a proper json stream
+processor with the features I needed without sacrificing speed and memory.
 
-There is also a benchmark of this tool comparing it with [oboe.js](https://github.com/jimhigson/oboe.js), [JSONStream](https://github.com/dominictarr/JSONStream) and [stream-json](https://www.npmjs.com/package/stream-json). See [benchmark](benchmark.md).
+There is a benchmark comparing YAJS with [oboe.js](https://github.com/jimhigson/oboe.js),
+[JSONStream](https://github.com/dominictarr/JSONStream) and
+[stream-json](https://www.npmjs.com/package/stream-json), including a fresh
+2026 run — see [benchmark](benchmark.md).
 
 ## Install
 
@@ -288,11 +304,26 @@ $ printf '{"a":1}\n{oops}\n{"a":3}\n' | yajs '$.a'
 # stderr: Error: Unexpected "o" at position 9 in state START   (exit status 1)
 ```
 
+## How it works
+
+In one sentence: YAJS watches the JSON go by as a stream of parser events,
+keeps a breadcrumb-trail stack of "where am I right now," checks that trail
+against your compiled selector at each step, and switches on a small recorder
+only while a matched value is passing by — so memory stays proportional to
+nesting depth plus matched values, never to input size.
+
+The full walkthrough — the tokenizer, the position stack, how wildcard and
+`..` matching really work (including why they need backtracking), the
+recorder and nested-match suspension, and where the CPU time goes — is in
+**[ARCHITECTURE.md](ARCHITECTURE.md)**. The algorithm is a TypeScript port of
+[JsonSurfer](https://github.com/jsurfer/JsonSurfer) (Java).
+
 ## Documentation
 
-This README is the primary reference for YAJS. (The project's GitHub wiki
-predates the 2.x rewrite by many years and is kept only as a historical
-artifact — prefer this document.)
+This README is the primary reference for using YAJS;
+[ARCHITECTURE.md](ARCHITECTURE.md) documents how it works inside. (The
+project's GitHub wiki predates the 2.x rewrite by many years and is kept only
+as a historical artifact — prefer these documents.)
 
 ## Bugs and Feedback
 
