@@ -1,0 +1,59 @@
+=== dense depth=4, 50000 records ===
+pair 1: baseline cpu 3555.7ms (wall 6548.9, matches 250000)  skip cpu 3232.1ms (wall 5151.3, matches 50000)  ratio(skip/base) 0.909
+pair 2: baseline cpu 3315.2ms (wall 5773.0, matches 250000)  skip cpu 3046.2ms (wall 5071.2, matches 50000)  ratio(skip/base) 0.919
+pair 3: baseline cpu 3298.7ms (wall 5220.2, matches 250000)  skip cpu 3112.9ms (wall 4995.3, matches 50000)  ratio(skip/base) 0.944
+pair 4: baseline cpu 3304.9ms (wall 5175.0, matches 250000)  skip cpu 2993.5ms (wall 5275.2, matches 50000)  ratio(skip/base) 0.906
+pair 5: baseline cpu 3210.2ms (wall 4848.1, matches 250000)  skip cpu 2952.5ms (wall 4865.1, matches 50000)  ratio(skip/base) 0.920
+pair 6: baseline cpu 3220.7ms (wall 5859.8, matches 250000)  skip cpu 2954.4ms (wall 4358.3, matches 50000)  ratio(skip/base) 0.917
+pair 7: baseline cpu 3117.1ms (wall 4308.8, matches 250000)  skip cpu 2991.5ms (wall 4499.1, matches 50000)  ratio(skip/base) 0.960
+pair 8: baseline cpu 3212.1ms (wall 5401.4, matches 250000)  skip cpu 3025.9ms (wall 6460.6, matches 50000)  ratio(skip/base) 0.942
+pair 9: baseline cpu 3179.6ms (wall 5481.1, matches 250000)  skip cpu 3004.6ms (wall 4860.6, matches 50000)  ratio(skip/base) 0.945
+
+selector=$..plugins file=/tmp/claude-1000/-home-thiago-workspace-yajs/6f320fb9-93d1-4710-976d-a4516162334f/scratchpad/dense-d4.ndjson pairs=9
+cpu ratio skip/baseline: median 0.920 [0.906..0.960]
+=> median speedup (baseline/skip): 1.087x
+
+=== dense depth=8, 30000 records ===
+pair 1: baseline cpu 3271.2ms (wall 5385.0, matches 270000)  skip cpu 2935.2ms (wall 4614.9, matches 30000)  ratio(skip/base) 0.897
+pair 2: baseline cpu 3150.6ms (wall 4860.2, matches 270000)  skip cpu 2874.4ms (wall 4301.4, matches 30000)  ratio(skip/base) 0.912
+pair 3: baseline cpu 3166.4ms (wall 5635.5, matches 270000)  skip cpu 2928.3ms (wall 4294.6, matches 30000)  ratio(skip/base) 0.925
+pair 4: baseline cpu 3032.0ms (wall 5178.5, matches 270000)  skip cpu 2946.5ms (wall 6207.2, matches 30000)  ratio(skip/base) 0.972
+pair 5: baseline cpu 3347.2ms (wall 7207.9, matches 270000)  skip cpu 3017.0ms (wall 7080.2, matches 30000)  ratio(skip/base) 0.901
+pair 6: baseline cpu 3126.6ms (wall 5377.5, matches 270000)  skip cpu 2993.2ms (wall 5289.2, matches 30000)  ratio(skip/base) 0.957
+pair 7: baseline cpu 3234.6ms (wall 6509.7, matches 270000)  skip cpu 2810.9ms (wall 4143.0, matches 30000)  ratio(skip/base) 0.869
+pair 8: baseline cpu 2981.7ms (wall 3921.5, matches 270000)  skip cpu 2887.8ms (wall 3871.5, matches 30000)  ratio(skip/base) 0.969
+pair 9: baseline cpu 3070.5ms (wall 4846.7, matches 270000)  skip cpu 2894.5ms (wall 3886.0, matches 30000)  ratio(skip/base) 0.943
+
+selector=$..plugins file=/tmp/claude-1000/-home-thiago-workspace-yajs/6f320fb9-93d1-4710-976d-a4516162334f/scratchpad/dense-d8.ndjson pairs=9
+cpu ratio skip/baseline: median 0.925 [0.869..0.972]
+=> median speedup (baseline/skip): 1.081x
+
+=== sparse depth=5, 100000 records, ~5% nesting rate ===
+pair 1: baseline cpu 2659.2ms (wall 4090.9, matches 125535)  skip cpu 2602.1ms (wall 4444.9, matches 100000)  ratio(skip/base) 0.979
+pair 2: baseline cpu 2608.8ms (wall 3294.6, matches 125535)  skip cpu 2541.8ms (wall 3609.5, matches 100000)  ratio(skip/base) 0.974
+pair 3: baseline cpu 2492.7ms (wall 3578.8, matches 125535)  skip cpu 2486.0ms (wall 4034.9, matches 100000)  ratio(skip/base) 0.997
+pair 4: baseline cpu 2607.9ms (wall 5670.4, matches 125535)  skip cpu 2548.9ms (wall 5939.1, matches 100000)  ratio(skip/base) 0.977
+pair 5: baseline cpu 2661.4ms (wall 5838.1, matches 125535)  skip cpu 2538.8ms (wall 6089.9, matches 100000)  ratio(skip/base) 0.954
+pair 6: baseline cpu 2736.6ms (wall 5499.2, matches 125535)  skip cpu 2733.1ms (wall 6518.4, matches 100000)  ratio(skip/base) 0.999
+pair 7: baseline cpu 2499.1ms (wall 3427.1, matches 125535)  skip cpu 2490.7ms (wall 3817.3, matches 100000)  ratio(skip/base) 0.997
+pair 8: baseline cpu 2564.4ms (wall 4691.8, matches 125535)  skip cpu 2650.8ms (wall 4758.1, matches 100000)  ratio(skip/base) 1.034
+pair 9: baseline cpu 2728.0ms (wall 5612.4, matches 125535)  skip cpu 2484.7ms (wall 3788.9, matches 100000)  ratio(skip/base) 0.911
+
+selector=$..plugins file=/tmp/claude-1000/-home-thiago-workspace-yajs/6f320fb9-93d1-4710-976d-a4516162334f/scratchpad/sparse-d5.ndjson pairs=9
+cpu ratio skip/baseline: median 0.979 [0.911..1.034]
+=> median speedup (baseline/skip): 1.022x
+
+=== disjoint (no self-nesting), 50000 records ===
+pair 1: baseline cpu 2761.4ms (wall 5390.3, matches 150000)  skip cpu 2455.7ms (wall 2965.5, matches 150000)  ratio(skip/base) 0.889
+pair 2: baseline cpu 2392.9ms (wall 3570.5, matches 150000)  skip cpu 2410.6ms (wall 2971.5, matches 150000)  ratio(skip/base) 1.007
+pair 3: baseline cpu 2394.7ms (wall 2737.5, matches 150000)  skip cpu 2370.2ms (wall 3513.4, matches 150000)  ratio(skip/base) 0.990
+pair 4: baseline cpu 2470.6ms (wall 4184.9, matches 150000)  skip cpu 2556.1ms (wall 4488.4, matches 150000)  ratio(skip/base) 1.035
+pair 5: baseline cpu 2327.1ms (wall 3602.8, matches 150000)  skip cpu 2453.5ms (wall 3773.6, matches 150000)  ratio(skip/base) 1.054
+pair 6: baseline cpu 2584.9ms (wall 4172.5, matches 150000)  skip cpu 2441.9ms (wall 3195.4, matches 150000)  ratio(skip/base) 0.945
+pair 7: baseline cpu 2368.0ms (wall 2721.8, matches 150000)  skip cpu 2311.2ms (wall 2671.0, matches 150000)  ratio(skip/base) 0.976
+pair 8: baseline cpu 2469.4ms (wall 4236.4, matches 150000)  skip cpu 2447.9ms (wall 5312.7, matches 150000)  ratio(skip/base) 0.991
+pair 9: baseline cpu 2398.3ms (wall 3346.2, matches 150000)  skip cpu 2371.9ms (wall 3597.6, matches 150000)  ratio(skip/base) 0.989
+
+selector=$..plugins file=/tmp/claude-1000/-home-thiago-workspace-yajs/6f320fb9-93d1-4710-976d-a4516162334f/scratchpad/disjoint.ndjson pairs=9
+cpu ratio skip/baseline: median 0.990 [0.889..1.054]
+=> median speedup (baseline/skip): 1.010x

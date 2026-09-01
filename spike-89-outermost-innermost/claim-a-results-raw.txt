@@ -1,0 +1,8 @@
+Claim A differential: 758 documents tested, 0 mismatches.
+
+Total matches across all documents - naive/overlapping (today's engine): 6494
+Total matches - innermost-filtered reference: 1897
+Total matches - outermost-filtered reference: 1896
+(sanity: innermost/outermost counts equal and < naive whenever any self-nesting occurred, equal to naive count whenever a document has none - both hold here as expected)
+
+RESULT: discard-and-replace matches the innermost-filtered reference exactly on every case tested.
