@@ -35,6 +35,15 @@ export class StreamContext {
     private dispatchers: ObjectDispatcher[] = [];
     private dispatcher: ObjectDispatcher;
 
+    // Completed dispatchers, reset and parked for reuse by a later match.
+    // Every dispatcher this context ever hands out is configured identically
+    // (same listener/projection/dropKeys, all derived from the one selector),
+    // so a cleanly completed one - resetForReuse() returns it to its
+    // just-constructed state - is indistinguishable from a fresh allocation.
+    // Dispatchers abandoned mid-build by resyncAfterError() are simply
+    // dropped, never pooled, so the pool only ever holds clean instances.
+    private dispatcherPool: ObjectDispatcher[] = [];
+
     private readonly onMatchListener: (value?: any) => void;
     private readonly onErrorListener: (err: Error) => void;
 
@@ -72,16 +81,34 @@ export class StreamContext {
     }
 
     reset(value?: any): void {
-        // Only a '..'-containing path (path.definite false - see the
-        // YAJSPath constructor) ever consults nearestAncestorIndex(), so
-        // only such a path needs StreamPosition to pay its incremental
-        // upkeep cost (issue #34) - everything else gets the cache as a
-        // pure no-op, keeping ordinary (non-descendant) matching exactly as
-        // cheap as before this fix. See the identical StreamPosition
-        // construction in startArray() below for the other spot a fresh
-        // position gets created.
-        this.position = new StreamPosition(this.pathIncludeArrayIndex, !this.path.definite);
+        this.freshPosition();
         this.match(value);
+    }
+
+    // Both callers need "a position in its just-constructed state at a
+    // genuinely fresh document boundary": reuse the existing instance
+    // (reinitialize() - it is already back at bare root whenever this is
+    // reached with a position at all, see the callers' ROOT checks) rather
+    // than allocating a new StreamPosition per document, which for NDJSON
+    // meant a full Stack/Root/Map/arrays construction per record and threw
+    // away the operator-slot reuse the stack had built up. A genuinely
+    // fresh construction only happens on the very first document and after
+    // resyncAfterError() (which nulls the position precisely because its
+    // mid-record state - including the incremental caches - can't be
+    // trusted).
+    //
+    // Only a '..'-containing path (path.definite false - see the
+    // YAJSPath constructor) ever consults nearestAncestorIndex(), so
+    // only such a path needs StreamPosition to pay its incremental
+    // upkeep cost (issue #34) - everything else gets the cache as a
+    // pure no-op, keeping ordinary (non-descendant) matching exactly as
+    // cheap as before this fix.
+    private freshPosition(): void {
+        if (this.position !== undefined) {
+            this.position.reinitialize();
+        } else {
+            this.position = new StreamPosition(this.pathIncludeArrayIndex, !this.path.definite);
+        }
     }
 
     // Counterpart to JsonSaxParser's own resyncAfterError() (see its
@@ -131,10 +158,7 @@ export class StreamContext {
         this.doOnValue();
         this.position.stepIntoObject();
         this.openContainers++;
-        this.dispatch((dispatcher) => {
-            dispatcher.startObject();
-            return false;
-        });
+        if (this.dispatcher) { this.dispatcher.startObject(); }
     }
 
     endObject(): void {
@@ -146,7 +170,7 @@ export class StreamContext {
         }
         this.openContainers--;
         this.position.stepOutObject();
-        this.dispatch((dispatcher) => dispatcher.endObject());
+        if (this.dispatcher && this.dispatcher.endObject()) { this.completeDispatcher(); }
     }
 
     startObjectEntry(key: string): void {
@@ -157,25 +181,19 @@ export class StreamContext {
             return;
         }
         this.position.updateObjectEntry(key);
-        this.dispatch((dispatcher) => {
-            dispatcher.startObjectEntry(key);
-            return false;
-        });
+        if (this.dispatcher) { this.dispatcher.startObjectEntry(key); }
     }
 
     startArray(): void {
        if (this.errored) { return; }
        if (this.position === undefined || this.position.peek().getType() === PathOperator.Type.ROOT) {
             // A genuinely fresh boundary (document start, or back at bare
-            // root between NDJSON documents): replace position, but - unlike
+            // root between NDJSON documents): refresh position, but - unlike
             // startObject() - do NOT match here. Per issue #14 a matched
             // array is never captured as one whole value; only its elements
             // are (see the ARRAY branch below), so matching against the
             // array's own container position must never succeed.
-            //
-            // See reset() above for why the constructor argument here isn't
-            // always true (issue #34).
-            this.position = new StreamPosition(this.pathIncludeArrayIndex, !this.path.definite);
+            this.freshPosition();
        } else if (this.position.peek().getType() === PathOperator.Type.ARRAY) {
             // Still within an already-open array's elements slot (see
             // StreamPosition's arrayIndexDepth): this array-open IS one of
@@ -195,10 +213,7 @@ export class StreamContext {
        // of an already-open array's elements - so nothing matches here.
        this.position.stepIntoArray();
        this.openContainers++;
-       this.dispatch((dispatcher) => {
-            dispatcher.startArray();
-            return false;
-        });
+       if (this.dispatcher) { this.dispatcher.startArray(); }
     }
 
     endArray(): void {
@@ -210,7 +225,7 @@ export class StreamContext {
         }
         this.openContainers--;
         this.position.stepOutArray();
-        this.dispatch((dispatcher) => dispatcher.endArray());
+        if (this.dispatcher && this.dispatcher.endArray()) { this.completeDispatcher(); }
     }
 
     onValue(value: any): void {
@@ -272,29 +287,43 @@ export class StreamContext {
             // place.
             this.doOnValue(value);
         }
-        this.dispatch((dispatcher) => {
-            dispatcher.onValue(value);
-            return false;
-        });
+        if (this.dispatcher) { this.dispatcher.onValue(value); }
     }
 
     doOnValue(value?: any): void {
-        this.position.peek().
-            onValue(() => this.match(value));
+        // Root is the only operator overriding PathOperator.onValue() (with a
+        // no-op) - every other operator's onValue() just invokes the delegate
+        // immediately. Branching on the type here, instead of the previous
+        // `peek().onValue(() => this.match(value))`, avoids allocating a
+        // fresh capturing closure per structural event on the hot path.
+        if (this.position.peek().getType() !== PathOperator.Type.ROOT) {
+            this.match(value);
+        }
     }
 
     private match(value?: any): boolean {
         const currentDepth = this.position.pathDepth();
-        if (this.path.definite || this.path.minimumDepth <= currentDepth) {
+        // The depth gate applies to definite paths too: minimumDepth for a
+        // definite path is the full pattern size (see YAJSPath.minimumDepth),
+        // and matchFrom() consumes at least one position level per pattern
+        // operator (every loop iteration decrements pointer2 exactly once,
+        // and pointer1 at most once), so a position shallower than the
+        // pattern can never match - attempting it just walks the pattern to
+        // a guaranteed failure. Skipping those attempts prunes the
+        // shallow-depth match calls a streaming document generates
+        // constantly (every scalar/object-open above the target depth).
+        if (this.path.minimumDepth <= currentDepth) {
             if (this.path.match(this.position)) {
                 if (value !== undefined) {
                     this.onMatchListener(value);
                 } else {
-                    const dispatcher = new ObjectDispatcher(this.onMatchListener,
-                        this.path.projectExpression,
-                        this.path.projectKeys);
-
-                    dispatcher.dropKeys = this.path.dropKeys;
+                    let dispatcher = this.dispatcherPool.pop();
+                    if (!dispatcher) {
+                        dispatcher = new ObjectDispatcher(this.onMatchListener,
+                            this.path.projectExpression,
+                            this.path.projectKeys);
+                        dispatcher.dropKeys = this.path.dropKeys;
+                    }
 
                     // Suspend whatever dispatcher is currently active (if any)
                     // beneath the new one - see the field comment on
@@ -337,39 +366,45 @@ export class StreamContext {
         this.onErrorListener(err);
     }
 
-    private dispatch(visitor: (dispatcher: ObjectDispatcher) => boolean): void {
-        if (this.dispatcher && visitor(this.dispatcher)) {
-            // The active dispatcher just completed - grab its own fully
-            // built value (it has already popped back to its own root, so
-            // peek().value holds it) before resuming whichever ancestor (if
-            // any) is waiting beneath it.
-            //
-            // Issue #38: while this dispatcher was active, whichever
-            // ancestor it suspended received NONE of the events that built
-            // this dispatcher's value - including the one event
-            // (startObject()/startArray()) that would otherwise have
-            // attached it under the ancestor's own currently-pending key/
-            // array slot (that event went only to this - the new, more
-            // specific - dispatcher instead, since suspension happens
-            // before it's forwarded; see match()). Left alone, the
-            // ancestor's own eventual match silently comes out missing this
-            // entire subtree once it resumes.
-            //
-            // Replaying the full buffered event stream to the ancestor
-            // would fix that but cost O(subtree size) per suspend/resume
-            // pair - for a uniformly nested '..'/wildcard match (many
-            // concurrently-suspended ancestors, one per depth level) that's
-            // the same O(depth^2) blowup issue #34 fixes elsewhere.
-            // Injecting the single already-fully-built value directly - via
-            // the ancestor's own onValue(), the exact same entry point a
-            // live startObject()/startArray()/onValue() event would have
-            // used - is O(1) instead: the ancestor doesn't need to relive
-            // how the value was built, only what it ended up being.
-            const completedValue = this.dispatcher.peek().value;
-            this.dispatcher = this.dispatchers.pop() || null;
-            if (this.dispatcher) {
-                this.dispatcher.onValue(completedValue);
-            }
+    // Invoked when the active dispatcher's endObject()/endArray() reported
+    // completion (each event site calls the dispatcher directly now - the
+    // former dispatch(visitor) indirection allocated a fresh closure per
+    // structural event on the hot path).
+    //
+    // The active dispatcher just completed - grab its own fully
+    // built value (it has already popped back to its own root, so
+    // peek().value holds it) before resuming whichever ancestor (if
+    // any) is waiting beneath it.
+    //
+    // Issue #38: while this dispatcher was active, whichever
+    // ancestor it suspended received NONE of the events that built
+    // this dispatcher's value - including the one event
+    // (startObject()/startArray()) that would otherwise have
+    // attached it under the ancestor's own currently-pending key/
+    // array slot (that event went only to this - the new, more
+    // specific - dispatcher instead, since suspension happens
+    // before it's forwarded; see match()). Left alone, the
+    // ancestor's own eventual match silently comes out missing this
+    // entire subtree once it resumes.
+    //
+    // Replaying the full buffered event stream to the ancestor
+    // would fix that but cost O(subtree size) per suspend/resume
+    // pair - for a uniformly nested '..'/wildcard match (many
+    // concurrently-suspended ancestors, one per depth level) that's
+    // the same O(depth^2) blowup issue #34 fixes elsewhere.
+    // Injecting the single already-fully-built value directly - via
+    // the ancestor's own onValue(), the exact same entry point a
+    // live startObject()/startArray()/onValue() event would have
+    // used - is O(1) instead: the ancestor doesn't need to relive
+    // how the value was built, only what it ended up being.
+    private completeDispatcher(): void {
+        const completed = this.dispatcher;
+        const completedValue = completed.peek().value;
+        completed.resetForReuse();
+        this.dispatcherPool.push(completed);
+        this.dispatcher = this.dispatchers.pop() || null;
+        if (this.dispatcher) {
+            this.dispatcher.onValue(completedValue);
         }
     }
 }
