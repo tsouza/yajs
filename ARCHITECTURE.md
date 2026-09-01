@@ -150,12 +150,55 @@ Three behaviors worth knowing:
   array emits the array's *elements* one at a time. This keeps memory bounded
   when a match is a huge array, and it is why the position stack treats ARRAY
   levels as transparent in §3.
-- **Matches inside matches** (issue #38): `$..a` where an `a` contains
-  another `a` produces overlapping recordings. The engine parks the outer
-  recorder on a stack (`StreamContext.dispatchers`), lets the inner one
-  record, and when the inner one finishes, hands its completed value up to
-  the parked outer recorder in O(1) — so the outer value isn't missing that
-  subtree. Getting this hand-back wrong silently corrupted ancestor values.
+- **Self-nesting descendant matches are innermost-only by default** (issue
+  #89): `$..a` where an `a` contains another `a` (comment threads, category
+  trees, folder structures) delivers only the *innermost* occurrence, not
+  every overlapping one. The mechanism is **discard-and-replace**: JSON is
+  walked strictly depth-first, so a new match can only start while a
+  recorder is already active if it's nested inside that recorder's own span
+  (two genuinely disjoint matches — different branches, neither nested in
+  the other — can never be simultaneously in flight). `StreamContext` uses
+  this to keep just a **single active-recorder slot**, not a stack: the
+  instant a deeper match starts, whatever was active is discarded outright
+  — never finished, never emitted, just dropped for GC — and replaced by
+  the new, deeper recorder. Whichever recorder reaches its own natural
+  close *without* having been discarded first is, by construction, the
+  innermost one, and is emitted directly; there's no parent to hand a value
+  back to, because the parent was already thrown away. This applies
+  uniformly whether the deeper match is itself another object/array or a
+  bare scalar (a scalar bypasses the recorder and delivers immediately, but
+  still discards whatever ancestor recorder was active — the only way a
+  scalar-terminated self-nesting chain, e.g. `{"a":{"a":5}}`, ends up
+  reporting just `5` instead of both `5` and `{"a":5}`).
+
+  This discard behavior is deliberately scoped to selectors whose own last
+  step is a **plain named key** (`$..a`, `$.x..a`, `$..[f]a`, …) —
+  `StreamContext`'s `innermostOnDescendantKey` flag, set once from the
+  compiled path's own last operator. A **wildcard**-terminated selector
+  (`$..*`, `$.*.*`, …) is deliberately exempt and keeps the *pre-#89*
+  "park the outer recorder on a stack, then splice the inner's completed
+  value back into it once the inner finishes" behavior for a completely
+  different, still-intentional kind of overlap: a wildcard meeting an ARRAY
+  level is genuinely ambiguous about how many hops it consumed (§3), and
+  both readings — the whole array element, *and* a property reached inside
+  that same element — are correct, wanted output, not a repeated key
+  nesting inside itself. Conflating the two was an early, real bug in this
+  fix's own development (verified by `{"a":[{"x":1}]}` against `$.*.*`
+  suddenly dropping the element match) — see `StreamContext`'s
+  `innermostOnDescendantKey` and `dispatcher`/`dispatchers` field comments
+  for the full reasoning, and `src/test/12-innermost-descendant.ts` for the
+  permanent differential test suite (ported from the pre-merge scoping
+  spike's own prototype, 0 mismatches across depths 2–12+, disjoint
+  branches, and array-transparency carve-outs).
+
+  The NDJSON fast path's `GenericWalker` (`lib/fastpath/FastPathEvaluator.ts`)
+  evaluates each node of an already-`JSON.parse`'d tree independently and has
+  no notion of "this match was superseded by a deeper one" at all — it still
+  reproduces the *pre-#89* "emit every overlapping match" behavior for a
+  self-nesting document. This is a known, deliberately out-of-scope
+  divergence between `fastPath: true` and the default engine (see
+  `src/test/10-fastpath.ts`'s pinned regression test for it) — not fixed as
+  part of #89, and tracked separately.
 - **Project and drop-keys** (`{…}` / `<…>`) are evaluated at delivery time on
   the recorded object: the project gate checks the object's **own** top-level
   keys (an own-property check — the prototype chain must not leak, issue

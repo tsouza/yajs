@@ -78,11 +78,47 @@ function stepsToSelector(steps: Step[]): string {
 // match (path, value) for that value, WITHOUT descending further (streams
 // element-by-element for arrays only if the pattern says to, per issue #14 -
 // a match is never automatically flattened past its own value).
-interface Hit { path: (string | number)[]; value: unknown }
+// `ref` is the actual matched value's own object/array/scalar reference -
+// for a matched value that's itself an array (issue #14 flattening below),
+// `ref` is each ELEMENT's own reference, never the shared array: per the
+// real engine, a matched array is never captured as one dispatcher - each
+// element gets its own, entirely independent one (see the "array of two
+// disjoint nested a's inside outer a" case in the differential test suite
+// - src/test/12-innermost-descendant.ts), so two sibling elements must
+// never be treated as containing each other just because they came from
+// the same flattened array.
+//
+// `ancestors` is the chain of object/array references (root-to-parent, in
+// order, NOT including `ref` itself) the walk passed through to reach this
+// hit. Issue #89's filterInnermostByRef() below uses this - not a
+// recursive value search through `ref` - to determine genuine document-
+// structure nesting between two hits: a value search would have to compare
+// SCALAR values by `===`, which for a primitive is value equality, not
+// occurrence identity (JS gives every distinct object/array its own
+// reference, but `1 === 1` and `null === null` regardless of which of two
+// unrelated positions in the document each came from) - with this
+// generator's small KEY_CHARS alphabet and boolean/null in the value
+// space, two DISJOINT branches coincidentally sharing a scalar match value
+// is a real, likely occurrence, not a hypothetical, and would have made a
+// value-search-based containment check misidentify unrelated hits as
+// nested in each other. Walking the ancestor CHAIN sidesteps this
+// entirely: containment is "is this hit's ref literally one of the other
+// hit's ancestors", answered by reference-equality over object/array
+// links only, never over scalar values.
+interface Hit { path: (string | number)[]; value: unknown; ref: unknown; ancestors: unknown[] }
 
 function oracleMatch(steps: Step[], value: unknown): Hit[] {
     const hits: Hit[] = [];
-    function walk(idx: number, val: unknown, path: (string | number)[]): void {
+    // `containers` mirrors `path`'s own threading (same shape, pushed at
+    // the same recursive call sites) but collects the actual object/array
+    // REFERENCES stepped through, not their key names - see the Hit
+    // interface comment above for why this, not `path`, is what
+    // filterInnermostByRef() needs. Only ever grows when a call's `val`
+    // genuinely changes to a CHILD of the current container - a call that
+    // re-examines the SAME `val` under a different step interpretation
+    // (the wildcard-into-array "reading (a)" and descendant's own
+    // zero-hop below) must NOT push, since no actual descent happened.
+    function walk(idx: number, val: unknown, path: (string | number)[], containers: unknown[]): void {
         if (idx >= steps.length) {
             // yajs (issue #14): a matched value that is itself an array is
             // NEVER captured/emitted whole - only its immediate elements
@@ -93,9 +129,14 @@ function oracleMatch(steps: Step[], value: unknown): Hit[] {
             // sets it - the index is NOT part of path by default, matching
             // runYajs()'s plain yajs(selector) call below.
             if (Array.isArray(val)) {
-                val.forEach((el) => hits.push({ path: [...path], value: el }));
+                // The array itself becomes a real container in each
+                // element's own ancestor chain (each element hit is
+                // reached BY stepping into this array), even though the
+                // array reference is never any hit's own `ref`.
+                const withArray = [...containers, val];
+                val.forEach((el) => hits.push({ path: [...path], value: el, ref: el, ancestors: withArray }));
             } else {
-                hits.push({ path: [...path], value: val });
+                hits.push({ path: [...path], value: val, ref: val, ancestors: containers });
             }
             return;
         }
@@ -103,13 +144,13 @@ function oracleMatch(steps: Step[], value: unknown): Hit[] {
         if (step.kind === 'child') {
             if (val !== null && typeof val === 'object' && !Array.isArray(val) &&
                     Object.prototype.hasOwnProperty.call(val, step.key)) {
-                walk(idx + 1, (val as any)[step.key], [...path, step.key]);
+                walk(idx + 1, (val as any)[step.key], [...path, step.key], [...containers, val]);
             } else if (Array.isArray(val)) {
                 // array transparency: retry the SAME step against each element,
                 // transparently - no path segment for the array or its index
                 // (verified against the real engine: $.a.b on
                 // {"a":[{"b":1},{"b":2}]} gives paths ["a","b"] x2, no index).
-                val.forEach((el) => walk(idx, el, [...path]));
+                val.forEach((el) => walk(idx, el, [...path], [...containers, val]));
             }
         } else if (step.kind === 'wildcard') {
             if (Array.isArray(val)) {
@@ -146,41 +187,71 @@ function oracleMatch(steps: Step[], value: unknown): Hit[] {
                 //      $.*.* reach ["a","a"]::0 (needs (b1) specifically -
                 //      (b2) alone would just duplicate reading (a) there,
                 //      since idx+1 is already terminal for a 2-token pattern).
-                if (idx + 1 >= steps.length) { walk(idx + 1, val, path); } // reading (a)
+                if (idx + 1 >= steps.length) { walk(idx + 1, val, path, containers); } // reading (a): same val, no descent
                 const precedingKind = idx > 0 ? steps[idx - 1].kind : 'root';
                 val.forEach((el) => {
                     if (precedingKind === 'wildcard' || precedingKind === 'descendant') {
-                        walk(idx, el, [...path]); // reading (b1): this wildcard re-applied
+                        walk(idx, el, [...path], [...containers, val]); // reading (b1): this wildcard re-applied
                     }
-                    walk(idx + 1, el, [...path]); // reading (b2): this wildcard swallowed too
+                    walk(idx + 1, el, [...path], [...containers, val]); // reading (b2): this wildcard swallowed too
                 });
             } else if (val !== null && typeof val === 'object') {
                 for (const k of Object.keys(val as object)) {
-                    walk(idx + 1, (val as any)[k], [...path, k]);
+                    walk(idx + 1, (val as any)[k], [...path, k], [...containers, val]);
                 }
             }
         } else { // descendant: try matching the REST of the pattern at every
                   // depth from here (including depth 0 - zero hops), then
                   // recurse into children regardless of whether this depth
                   // matched (a descendant reaches arbitrary depth).
-            walk(idx + 1, val, path); // zero-hop
+            walk(idx + 1, val, path, containers); // zero-hop: same val, no descent
             if (Array.isArray(val)) {
                 // transparent, like every other array-recursion above - no
                 // index by default (pathIncludeArrayIndex is never set here)
-                val.forEach((el) => walk(idx, el, [...path]));
+                val.forEach((el) => walk(idx, el, [...path], [...containers, val]));
             } else if (val !== null && typeof val === 'object') {
                 for (const k of Object.keys(val as object)) {
-                    walk(idx, (val as any)[k], [...path, k]);
+                    walk(idx, (val as any)[k], [...path, k], [...containers, val]);
                 }
             }
         }
     }
-    walk(0, value, []);
+    walk(0, value, [], []);
     return hits;
 }
 
 function hitKey(h: Hit): string {
     return JSON.stringify(h.path) + '::' + JSON.stringify(h.value);
+}
+
+// Issue #89: is `ancestorHit`'s own matched value a genuine document-
+// structure ancestor of `hit`'s? True iff `ancestorHit.ref` is itself an
+// object/array (a scalar can never contain anything) AND it appears,
+// by reference, in `hit`'s own recorded ancestor chain - see the Hit
+// interface comment above for why this is a reference-identity check
+// over the ancestor chain, not a value search through `ancestorHit.ref`.
+function isNestedIn(hit: Hit, ancestorHit: Hit): boolean {
+    if (ancestorHit.ref === null || typeof ancestorHit.ref !== 'object') { return false; }
+    return hit.ancestors.includes(ancestorHit.ref);
+}
+
+// Issue #89: the real engine's DEFAULT for a descendant selector ending in
+// a plain key (as opposed to a wildcard - see StreamContext's
+// innermostOnDescendantKey field comment for exactly which shapes and why)
+// changed from "emit every overlapping match" to innermost-only. Mirrors
+// the reference algorithm issue #89's own scoping investigation verified
+// discard-and-replace against (spike-89-outermost-innermost/
+// claim-a-differential.js's filterInnermost(), ported here from that
+// standalone prototype into this permanent property oracle): drop any hit
+// that is itself an ancestor of some OTHER hit (i.e. keep only the leaves
+// of each nesting chain). Two hits with no containment relation at all
+// (disjoint branches, or a nested match through an UNRELATED intervening
+// key that doesn't itself match) are never affected - each is its own
+// trivial "chain of one" and survives untouched, satisfying issue #89's
+// own required invariant that this change is a complete no-op whenever
+// the matched key never actually self-nests.
+function filterInnermostByRef(hits: Hit[]): Hit[] {
+    return hits.filter((m) => !hits.some((other) => other !== m && isNestedIn(other, m)));
 }
 
 function runYajs(selector: string, json: string): Promise<Hit[]> {
@@ -245,7 +316,16 @@ describe('selector-vs-independent-oracle property', () => {
                     if (hasDirectArrayOfArray(doc)) { return; } // known gap, see comment above
                     const json = JSON.stringify(doc);
 
-                    const expected = new Set(oracleMatch(steps, doc).map(hitKey));
+                    // Issue #89: the real engine's innermost-only default
+                    // applies only when the selector's own last step is a
+                    // plain key (see StreamContext's innermostOnDescendantKey
+                    // field comment for why a wildcard-terminated selector -
+                    // e.g. a generated `$..*` - is deliberately exempt and
+                    // must keep emitting every overlapping match unfiltered).
+                    const rawHits = oracleMatch(steps, doc);
+                    const hits = steps[steps.length - 1].kind === 'child' ?
+                        filterInnermostByRef(rawHits) : rawHits;
+                    const expected = new Set(hits.map(hitKey));
                     const actual = await runYajs(selector, json);
                     const actualSet = new Set(actual.map(hitKey));
 

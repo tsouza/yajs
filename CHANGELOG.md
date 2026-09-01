@@ -7,6 +7,26 @@ project was modernized end-to-end, and roughly thirty long-standing bugs
 were found and fixed. Issue/PR links: [issues](https://github.com/tsouza/yajs/issues),
 [pull requests](https://github.com/tsouza/yajs/pulls).
 
+### Behavior changes
+
+- **`$..a`-shaped descendant matches are innermost-only for a self-nesting
+  document.** When the matched key nests inside itself (`$..a` where an
+  `a` contains another `a` — comment threads, category trees, folder
+  structures), the engine used to emit **both** the outer and the inner
+  occurrence (issue #38's overlap handling). It now emits only the
+  **innermost** occurrence by default. No selector syntax changed — bare
+  `$..a` still parses exactly as before, only its *output* for a
+  self-nesting document is different. Two matches that are **not** nested
+  in each other (disjoint branches, array siblings) are completely
+  unaffected. A wildcard-terminated descendant selector (`$..*`, `$.*.*`)
+  is unaffected too — it still matches every level, exactly as before. See
+  the README's "Self-nesting descendant matches" section and
+  [ARCHITECTURE.md §4](ARCHITECTURE.md#4-the-recorder--libdispatcher-and-libcontextstreamcontextts)
+  for the mechanism (discard-and-replace, replacing the old park+inject
+  recorder stack), and note the opt-in `fastPath` walker does **not**
+  implement this yet — it still emits every overlapping match, a known,
+  separately-tracked divergence — [#89](https://github.com/tsouza/yajs/issues/89)
+
 ### Modernization
 
 - TypeScript 5.9, vitest, ESLint 9, GitHub Actions CI, real test coverage (including the [JSONTestSuite](https://github.com/nst/JSONTestSuite) conformance corpus) — [PR #7](https://github.com/tsouza/yajs/pull/7)

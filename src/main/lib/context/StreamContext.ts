@@ -14,33 +14,117 @@ export class StreamContext {
     // (see StreamPosition's own field comment for why).
     private readonly pathIncludeArrayIndex: boolean;
 
+    // Issue #89: whether a match succeeding while another is already active
+    // (see the dispatcher field comment below) should discard the active
+    // one instead of leaving it alone. True iff this path's own LAST
+    // operator is a plain named key (ChildNode, PathOperator.Type.OBJECT) -
+    // i.e. the selector has an actual "target key" in the sense issue #89
+    // means it (`$..a`, `$.x..a`, `$..[f]a`, ...; a definite, non-'..'
+    // chain like `$.a.b` also qualifies, harmlessly - see below).
+    //
+    // Deliberately narrower than "any match while a dispatcher is active":
+    // that broader condition is also met by an entirely different, already
+    // *intentional* overlap - a WILDCARD-terminated pattern (`$..*`,
+    // `$.*.*`, ...) reaching both an array element as a whole (one
+    // reading of the wildcard-meets-array ambiguity - see
+    // YAJSPath.matchFrom()'s ARRAY branch) and, separately, a property
+    // inside that same element (the other reading) - two matches, one
+    // nested inside the other, that are each a genuinely different valid
+    // interpretation of the SAME wildcard, not "the same target key found
+    // again deeper." `{"a":[{"x":1}]}` against `$.*.*`/`$..*` is the
+    // concrete repro (see 03-yajs.ts's "wildcard reaches an array-valued
+    // key's elements" describe block): both interpretations - the element
+    // `{x:1}` AND its own property `x`'s value `1` - are correct, wanted
+    // output, unrelated to any key nesting inside itself, and must keep
+    // being emitted both, exactly as before. Only a match ending in a
+    // plain ChildNode is exempt from that ambiguity (ChildNode.match()
+    // is a deterministic single-key check, never a multi-reading
+    // backtrack), so gating on it here confines the new discard-and-
+    // replace behavior to precisely the self-nesting-named-key shape
+    // issue #89 describes, leaving every wildcard-terminated selector a
+    // complete no-op (see also the scope-correctness tests in
+    // src/test/12-innermost-descendant.ts's "innermost-only default for
+    // self-nesting descendant matches (issue #89)" describe block, and the
+    // regression coverage in 03-yajs.ts's "wildcard reaches an array-valued
+    // key's elements" describe block referenced above).
+    //
+    // A definite (non-'..') ChildNode-terminated path like `$.a.b` also
+    // has this true, but harmlessly so: a fixed-depth pattern can never
+    // have two matches in flight at once regardless of this flag (a
+    // shallower position can't also satisfy a pattern that requires an
+    // exact deeper depth), so the discard branch below is simply never
+    // reached for one.
+    private readonly innermostOnDescendantKey: boolean;
+
     // this.dispatcher is the currently *active* dispatcher (the one that
     // receives every forwarded startObject/startArray/startObjectEntry/
-    // onValue/endObject/endArray call). this.dispatchers is a LIFO stack of
-    // *suspended* ancestor dispatchers: when a new candidate value starts
-    // while one is already active (e.g. a nested array/object that itself
-    // matches the path, or - see StreamPosition - a fresh top-level-array
-    // element), the current dispatcher is pushed here and parked until the
-    // newer one completes, at which point it is popped back into
-    // this.dispatcher and resumes receiving events.
+    // onValue/endObject/endArray call).
     //
-    // Only the active dispatcher ever receives events (see dispatch()) -
-    // suspended ones are inert. This keeps both memory and per-event work
-    // O(depth) instead of the O(depth^2) that resulted from forwarding every
-    // event to *every* dispatcher ever created: a long run of consecutive
-    // array/object opens (e.g. thousands of unclosed `[`) used to leave all
-    // of them simultaneously "active", so each subsequent open re-dispatched
-    // startArray() to every previously-accumulated dispatcher, each of which
-    // independently rebuilt its own copy of everything nested below it.
-    private dispatchers: ObjectDispatcher[] = [];
+    // A new match can only ever start while this.dispatcher is already
+    // truthy when the new match is a DESCENDANT of the currently active
+    // one's own start position - JSON is walked strictly depth-first, so
+    // two genuinely disjoint matches (different branches, neither nested in
+    // the other) can never be simultaneously in flight (a sibling match can
+    // only start after its sibling has fully closed). What happens then
+    // splits in two, gated by this.innermostOnDescendantKey (see its own
+    // field comment for exactly which selector shapes each side covers):
+    //
+    //  - Issue #89 (innermostOnDescendantKey true - a selector with an
+    //    actual named target key): the new, deeper match is another
+    //    occurrence of that same target key nesting inside itself - e.g.
+    //    `$..a` where an `a` contains another `a`. Default (only) behavior
+    //    for that shape is innermost-only: match() discards whatever was
+    //    active outright (never finishes building it, never emits it, just
+    //    drops the reference and lets it get GC'd) the instant the deeper
+    //    match starts, then this.dispatcher is replaced by the new, deeper
+    //    capture directly - no stack slot needed (see this.dispatchers'
+    //    field comment for why one is still needed for the OTHER case
+    //    below, and why it is never touched for this one). Whichever
+    //    dispatcher reaches its own natural close event without having
+    //    been discarded first is, by construction, the innermost one, and
+    //    is emitted directly - no hand-back to any parent needed, because
+    //    the parent was already thrown away.
+    //  - Otherwise (a wildcard-terminated selector - see
+    //    this.innermostOnDescendantKey's field comment for why this case
+    //    is exempt from the above): this is instead the PRE-EXISTING issue
+    //    #38 "matches inside matches" overlap (a wildcard-meets-array
+    //    dual reading, not a repeating named key) - unchanged, still
+    //    "emit every overlapping match": this.dispatcher is parked on
+    //    this.dispatchers and later resumed, exactly as before issue #89.
     private dispatcher: ObjectDispatcher;
+
+    // LIFO stack of *suspended* ancestor dispatchers, used ONLY for the
+    // non-innermostOnDescendantKey case described above (see this.dispatcher's
+    // field comment) - i.e. never touched at all for a selector with a
+    // named target key (issue #89's discard-and-replace needs no stack,
+    // just the single this.dispatcher slot - JSON's depth-first traversal
+    // makes a stack unnecessary there, confirmed empirically by the
+    // pre-merge scoping spike's differential prototype before this file
+    // was changed - see issue #89's own comment thread). When a new
+    // candidate value starts while one
+    // is already active (a nested array/object that itself matches a
+    // wildcard-terminated path), the current dispatcher is pushed here and
+    // parked until the newer one completes, at which point it is popped
+    // back into this.dispatcher and resumes receiving events.
+    //
+    // Only the active dispatcher ever receives events - suspended ones are
+    // inert. This keeps both memory and per-event work O(depth) instead of
+    // the O(depth^2) that resulted from forwarding every event to *every*
+    // dispatcher ever created: a long run of consecutive array/object opens
+    // (e.g. thousands of unclosed `[`) used to leave all of them
+    // simultaneously "active", so each subsequent open re-dispatched
+    // startArray() to every previously-accumulated dispatcher, each of
+    // which independently rebuilt its own copy of everything nested below
+    // it.
+    private dispatchers: ObjectDispatcher[] = [];
 
     // Completed dispatchers, reset and parked for reuse by a later match.
     // Every dispatcher this context ever hands out is configured identically
     // (same listener/projection/dropKeys, all derived from the one selector),
     // so a cleanly completed one - resetForReuse() returns it to its
     // just-constructed state - is indistinguishable from a fresh allocation.
-    // Dispatchers abandoned mid-build by resyncAfterError() are simply
+    // Dispatchers abandoned mid-build - by resyncAfterError(), or discarded
+    // outright by match()'s innermost-only replacement above - are simply
     // dropped, never pooled, so the pool only ever holds clean instances.
     private dispatcherPool: ObjectDispatcher[] = [];
 
@@ -75,6 +159,7 @@ export class StreamContext {
         this.path = path;
         this.onErrorListener = onError;
         this.pathIncludeArrayIndex = pathIncludeArrayIndex;
+        this.innermostOnDescendantKey = path.peek().getType() === PathOperator.Type.OBJECT;
 
         this.onMatchListener = (value?: any) =>
             onMatch(this.position.path(pathIncludeArrayIndex), value);
@@ -314,7 +399,23 @@ export class StreamContext {
         // constantly (every scalar/object-open above the target depth).
         if (this.path.minimumDepth <= currentDepth) {
             if (this.path.match(this.position)) {
+                // See this.dispatcher's field comment for the full
+                // reasoning behind this split.
                 if (value !== undefined) {
+                    // A scalar match bypasses the dispatcher entirely and
+                    // is delivered directly, exactly as before issue #89 -
+                    // EXCEPT for an innermostOnDescendantKey selector,
+                    // where a scalar match this deep is still the same
+                    // target key nesting inside itself one level further
+                    // (e.g. `$..a` against {"a":{"a":5}}: the inner "a"'s
+                    // scalar value IS the deeper match), so the ancestor
+                    // capture must be discarded here too - the only place
+                    // a scalar match can reach that isn't reachable via the
+                    // object/array branch below, since a scalar match never
+                    // itself becomes this.dispatcher.
+                    if (this.innermostOnDescendantKey) {
+                        this.dispatcher = null;
+                    }
                     this.onMatchListener(value);
                 } else {
                     let dispatcher = this.dispatcherPool.pop();
@@ -324,13 +425,18 @@ export class StreamContext {
                             this.path.projectKeys);
                         dispatcher.dropKeys = this.path.dropKeys;
                     }
-
-                    // Suspend whatever dispatcher is currently active (if any)
-                    // beneath the new one - see the field comment on
-                    // this.dispatchers for why this must stay O(1) here.
-                    if (this.dispatcher) {
+                    if (this.dispatcher && !this.innermostOnDescendantKey) {
+                        // Pre-existing issue #38 overlap (wildcard-meets-
+                        // array dual reading, not a repeating named key) -
+                        // park the ancestor, unchanged from before #89.
                         this.dispatchers.push(this.dispatcher);
                     }
+                    // Issue #89: for an innermostOnDescendantKey selector,
+                    // whatever was active here (if anything) is simply
+                    // overwritten - discarded outright (never finished,
+                    // never emitted, just dropped for GC) rather than
+                    // parked, since the new, deeper match is the same
+                    // target key nesting inside itself.
                     this.dispatcher = dispatcher;
                 }
                 return true;
@@ -369,34 +475,43 @@ export class StreamContext {
     // Invoked when the active dispatcher's endObject()/endArray() reported
     // completion (each event site calls the dispatcher directly now - the
     // former dispatch(visitor) indirection allocated a fresh closure per
-    // structural event on the hot path).
+    // structural event on the hot path). By the time this runs, the
+    // dispatcher has already delivered its value to the listener itself
+    // (ObjectDispatcher.endObject()/endArray() call its own dispatch()
+    // before reporting completion) - this method only handles what happens
+    // to the dispatcher afterward.
     //
-    // The active dispatcher just completed - grab its own fully
-    // built value (it has already popped back to its own root, so
-    // peek().value holds it) before resuming whichever ancestor (if
-    // any) is waiting beneath it.
+    // The active dispatcher just completed without ever having been
+    // discarded by a deeper match (see match()) - pool it, then resume
+    // whichever ancestor (if any) is waiting on this.dispatchers.
     //
-    // Issue #38: while this dispatcher was active, whichever
-    // ancestor it suspended received NONE of the events that built
-    // this dispatcher's value - including the one event
-    // (startObject()/startArray()) that would otherwise have
-    // attached it under the ancestor's own currently-pending key/
-    // array slot (that event went only to this - the new, more
-    // specific - dispatcher instead, since suspension happens
-    // before it's forwarded; see match()). Left alone, the
-    // ancestor's own eventual match silently comes out missing this
-    // entire subtree once it resumes.
+    // For an innermostOnDescendantKey selector (issue #89),
+    // this.dispatchers is never pushed to (see match()), so the pop()
+    // below always yields undefined and this.dispatcher simply goes back
+    // to empty - by construction (JSON's depth-first traversal) the
+    // dispatcher that just completed is the innermost occurrence for its
+    // nesting chain, any ancestor it nested inside having already been
+    // discarded outright the instant this one started, so there is
+    // nothing left to resume.
     //
-    // Replaying the full buffered event stream to the ancestor
-    // would fix that but cost O(subtree size) per suspend/resume
-    // pair - for a uniformly nested '..'/wildcard match (many
-    // concurrently-suspended ancestors, one per depth level) that's
-    // the same O(depth^2) blowup issue #34 fixes elsewhere.
-    // Injecting the single already-fully-built value directly - via
-    // the ancestor's own onValue(), the exact same entry point a
-    // live startObject()/startArray()/onValue() event would have
-    // used - is O(1) instead: the ancestor doesn't need to relive
-    // how the value was built, only what it ended up being.
+    // For a wildcard-terminated selector, this is the pre-existing issue
+    // #38 park+inject resume: whichever ancestor this dispatcher suspended
+    // received NONE of the events that built this dispatcher's value -
+    // including the one event (startObject()/startArray()) that would
+    // otherwise have attached it under the ancestor's own currently-
+    // pending key/array slot (that event went only to this - the new, more
+    // specific - dispatcher instead, since suspension happens before it's
+    // forwarded; see match()). Left alone, the ancestor's own eventual
+    // match silently comes out missing this entire subtree once it
+    // resumes. Replaying the full buffered event stream to the ancestor
+    // would fix that but cost O(subtree size) per suspend/resume pair -
+    // for a uniformly nested wildcard match (many concurrently-suspended
+    // ancestors, one per depth level) that's the same O(depth^2) blowup
+    // issue #34 fixes elsewhere. Injecting the single already-fully-built
+    // value directly - via the ancestor's own onValue(), the exact same
+    // entry point a live startObject()/startArray()/onValue() event would
+    // have used - is O(1) instead: the ancestor doesn't need to relive how
+    // the value was built, only what it ended up being.
     private completeDispatcher(): void {
         const completed = this.dispatcher;
         const completedValue = completed.peek().value;
