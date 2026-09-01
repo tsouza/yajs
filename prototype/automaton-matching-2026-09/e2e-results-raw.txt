@@ -1,0 +1,64 @@
+Issue #80: real end-to-end paired benchmark raw output.
+
+Methodology: e2e-bench.ts, mirroring PR #91's claim-b-bench.ts (issue #89
+Claim B) - alternating baseline/automaton runs in the same process, CPU
+time via process.cpuUsage(), median of 7 pairs, spread shown. Baseline =
+the real, unmodified src/main/lib/context/StreamContext.ts driven by the
+real JsonSaxParser. Automaton = StreamContextAutomaton.ts (a near-verbatim
+copy of StreamContext.ts with only the match() call swapped for the
+automaton - see that file's header for the full diff summary), driven by
+the SAME real JsonSaxParser.
+
+Data: a REAL prefix of src/bench/data/data-2.ndjson.gz (the actual
+benchmark.md Dataset 2 elasticsearch monitoring dump), decompressed - not
+synthetic. 20,000 real records, 108.7MB.
+
+=== $..plugins (benchmark.md's own Dataset 2 selection path) ===
+
+file=data-2-20k.ndjson (108.7MB) selector=$..plugins pairs=7
+pair 1: baseline cpu 13116.4ms (wall 17741.6, matches 100000)  automaton cpu 16083.8ms (wall 26655.2, matches 100000)  ratio(automaton/base) 1.226
+pair 2: baseline cpu 13964.4ms (wall 30785.0, matches 100000)  automaton cpu 16392.4ms (wall 32875.4, matches 100000)  ratio(automaton/base) 1.174
+pair 3: baseline cpu 13562.6ms (wall 25317.3, matches 100000)  automaton cpu 13851.1ms (wall 14722.9, matches 100000)  ratio(automaton/base) 1.021
+pair 4: baseline cpu 11534.5ms (wall 12765.0, matches 100000)  automaton cpu 14672.0ms (wall 16726.9, matches 100000)  ratio(automaton/base) 1.272
+pair 5: baseline cpu 12414.2ms (wall 13562.1, matches 100000)  automaton cpu 12630.5ms (wall 13952.7, matches 100000)  ratio(automaton/base) 1.017
+pair 6: baseline cpu 9227.1ms (wall 9779.4, matches 100000)  automaton cpu 15575.9ms (wall 19737.9, matches 100000)  ratio(automaton/base) 1.688
+pair 7: baseline cpu 13169.0ms (wall 13998.3, matches 100000)  automaton cpu 15332.7ms (wall 16021.3, matches 100000)  ratio(automaton/base) 1.164
+
+cpu ratio automaton/baseline: median 1.174 [1.017..1.688]
+=> median END-TO-END speedup (baseline/automaton): 0.852x  (automaton ~17% SLOWER)
+Match counts agreed exactly on every pair (100000 = 100000).
+
+=== $..* (match-everything, largest matching-layer-only speedup observed: 1.89x) ===
+
+file=data-2-20k.ndjson (108.7MB) selector=$..* pairs=7
+pair 1: baseline cpu 18638.4ms (wall 23129.8, matches 5260000)  automaton cpu 21488.2ms (wall 37740.6, matches 5260000)  ratio(automaton/base) 1.153
+pair 2: baseline cpu 18842.6ms (wall 27599.4, matches 5260000)  automaton cpu 20944.9ms (wall 31428.9, matches 5260000)  ratio(automaton/base) 1.112
+pair 3: baseline cpu 19225.8ms (wall 31735.2, matches 5260000)  automaton cpu 21301.2ms (wall 34381.1, matches 5260000)  ratio(automaton/base) 1.108
+pair 4: baseline cpu 17944.7ms (wall 21520.6, matches 5260000)  automaton cpu 19813.6ms (wall 24627.9, matches 5260000)  ratio(automaton/base) 1.104
+pair 5: baseline cpu 18083.8ms (wall 22698.1, matches 5260000)  automaton cpu 20221.8ms (wall 26005.3, matches 5260000)  ratio(automaton/base) 1.118
+pair 6: baseline cpu 18737.5ms (wall 20201.0, matches 5260000)  automaton cpu 19803.9ms (wall 21234.5, matches 5260000)  ratio(automaton/base) 1.057
+pair 7: baseline cpu 18161.1ms (wall 20247.7, matches 5260000)  automaton cpu 19670.5ms (wall 22832.6, matches 5260000)  ratio(automaton/base) 1.083
+
+cpu ratio automaton/baseline: median 1.108 [1.057..1.153]
+=> median END-TO-END speedup (baseline/automaton): 0.903x  (automaton ~10% SLOWER)
+Match counts agreed exactly on every pair (5260000 = 5260000).
+
+=== Interpretation ===
+
+Both real selector shapes this issue asked about regress end-to-end,
+despite the matching-layer-only benchmark (bench.ts, walking already-parsed
+JS object trees with no tokenizer/StreamPosition-output overhead) showing
+apparent speedups of 1.46x and 1.89x respectively for the same two
+selectors. The matching-layer-only number was misleading: it compared the
+real backward-walk ALONE against the automaton ALONE, but in the real
+pipeline StreamPosition is maintained regardless of which matcher is used
+(startObjectEntry/stepIntoObject/etc. still have to run for path-string
+output and dispatcher bookkeeping) - so the automaton's own per-event cost
+(this prototype's lazy-DFA transition lookup builds a template-literal
+string key and does a Map hash+lookup on every single event, plus a SECOND
+state/bits stack pushed and popped in lockstep with StreamPosition's own)
+is purely ADDITIVE overhead on top of that already-necessary bookkeeping,
+not a replacement for the backward-walk's cost. For a selector this short
+($..plugins is Root + Descendant + one Child; even $..* is Root +
+Descendant + one Wildcard), the real backward-walk was already cheap enough
+that this prototype's own implementation overhead exceeds what it saves.

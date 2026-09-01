@@ -361,6 +361,19 @@ export class AutomatonMatcher {
         return this.automaton.isAccepting(this.stateStack[this.stateStack.length - 1]);
     }
 
+    // Returns this matcher to its just-constructed state (both stacks
+    // truncated back to their single initial entry) - mirrors
+    // StreamPosition.reinitialize(), so a caller reusing one StreamPosition
+    // across NDJSON records (StreamContext's own documented optimization,
+    // issue #34) can reuse one AutomatonMatcher the same way instead of
+    // allocating a fresh one per record. Only valid to call when already
+    // back at depth 1 (both stacks length 1), exactly like reinitialize()'s
+    // own precondition.
+    reset(): void {
+        this.stateStack.length = 1;
+        this.bitsStack.length = 1;
+    }
+
     // Push a new object slot (key not yet known - mirrors stepIntoObject()).
     enterObjectSlot(): void {
         const top = this.stateStack.length - 1;
