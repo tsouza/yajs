@@ -56,8 +56,15 @@ describe('array-splitter fast path (opt-in, issue #86)', () => {
                 '[{"a":1,"nested":{"b":2}},{"nested":{"b":3}}]'],
             ['project', '$.a{x}', '[{"a":{"x":1,"y":2}},{"a":{"y":3}}]'],
             ['drop keys at chain terminus', '$<b>', '[{"a":1,"b":2,"c":3}]'],
-            ['drop keys with nested match substitution (issue #38)', '$..a<b>',
-                '[{"a":{"b":1,"c":{"a":{"b":2,"d":3}}}}]'],
+            // NOT a self-nesting "a" here (issue #38's original repro for
+            // this row used one) - since issue #89, GenericWalker (shared
+            // by both fast-path modes) doesn't implement the real engine's
+            // innermost-only default for a self-nesting descendant match,
+            // so that shape belongs in the dedicated divergence test below
+            // instead of this "must match" list - see 10-fastpath.ts's own
+            // identical exclusion for the NDJSON mode.
+            ['drop keys through a descendant match, no self-nesting (issue #38)', '$..a<b>',
+                '[{"x":{"a":{"b":1,"c":2}}}]'],
             ['strings containing commas/brackets/braces (structural noise inside quotes)', '$',
                 '["s,x","a]b","c}d","e[f","g{h"]'],
             ['escaped quotes and backslashes inside strings', '$',
@@ -108,6 +115,31 @@ describe('array-splitter fast path (opt-in, issue #86)', () => {
                 expect(fast.out).to.deep.equal(real.out);
                 expect(real.out).to.deep.equal([
                     { path: [0], value: 10 }, { path: [1], value: 20 }, { path: [2], value: 30 },
+                ]);
+            }));
+    });
+
+    // Same known, already-documented divergence 10-fastpath.ts pins for
+    // NDJSON mode (issue #89): GenericWalker (shared by both fast-path
+    // modes - FastPathEvaluator.ts) evaluates each node independently
+    // against an already-JSON.parse'd tree and has no notion of "an outer
+    // match was superseded by a deeper one", so it still emits every
+    // overlapping match for a self-nesting descendant match, unlike the
+    // real engine's innermost-only default. Deliberately out of scope here
+    // too (same PR as issue #89) - pinned so it stays visible rather than
+    // silently missing.
+    describe('documented semantic divergence: self-nesting descendant matches (issue #89, not yet unified)', () => {
+        it('the real engine is innermost-only, the array-splitter fast path still emits every overlapping match', () =>
+            Promise.all([
+                run('$..a', '[{"a":{"b":{"a":{"c":1}}}}]', { fastPath: false }),
+                run('$..a', '[{"a":{"b":{"a":{"c":1}}}}]', { fastPath: true, fastPathMode: 'array' }),
+            ]).then(([real, fast]) => {
+                expect(real.out).to.deep.equal([
+                    { path: ['a', 'b', 'a'], value: { c: 1 } },
+                ]);
+                expect(fast.out).to.deep.equal([
+                    { path: ['a', 'b', 'a'], value: { c: 1 } },
+                    { path: ['a'], value: { b: { a: { c: 1 } } } },
                 ]);
             }));
     });
@@ -357,7 +389,13 @@ describe('array-splitter fast path (opt-in, issue #86)', () => {
             ),
         })).value;
 
-        const SELECTORS = ['$', '$.a', '$.a.b', '$.*', '$..a', '$..*', '$.a{x}', '$.a<x>'];
+        // '$..a' is deliberately excluded here (unlike '$..*', which issue
+        // #89's own scope note says is unaffected - see the dedicated
+        // divergence test above): the random generator can and does
+        // produce self-nesting "a" values, which would spuriously fail
+        // this sweep's exact-match assertion against the already-documented
+        // GenericWalker divergence rather than against a real bug.
+        const SELECTORS = ['$', '$.a', '$.a.b', '$.*', '$..*', '$.a{x}', '$.a<x>'];
 
         // Occasionally corrupt one element's text with a fallback-
         // triggering anomaly, exercising the three triggers alongside
@@ -392,7 +430,14 @@ describe('array-splitter fast path (opt-in, issue #86)', () => {
                 },
             ),
             { numRuns: 300 },
-        ));
+        // Each of the 300 runs does two full stream round-trips
+        // (real + fast), so the default 5s vitest test timeout is too
+        // tight under load (confirmed by a standalone, un-timed 8000-run
+        // sweep of this exact property finding zero failures - see this
+        // file's own top comment) - matches the 30s timeout convention
+        // already established for other slow property/chunk-boundary
+        // tests in this repo.
+        ), 30000);
     });
 });
 
