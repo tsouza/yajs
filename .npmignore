@@ -106,6 +106,10 @@ src
 # of the published library
 bench-proto
 
+# dev-only go/no-go spike prototype (issue #79) - not part of the published
+# library
+spike-skip
+
 # repo/dev files that have no business in the published tarball
 .gitattributes
 .gitmodules
