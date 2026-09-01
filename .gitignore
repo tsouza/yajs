@@ -99,4 +99,10 @@ typings/
 # build
 dist
 
+# Stryker mutation testing (see stryker.conf.json / README for how to run
+# it manually) - scratch work directory and generated HTML/JSON report,
+# never committed.
+.stryker-tmp
+reports/mutation
+
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode

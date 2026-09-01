@@ -375,6 +375,27 @@ recorder and nested-match suspension, and where the CPU time goes — is in
 **[ARCHITECTURE.md](ARCHITECTURE.md)**. The algorithm is a TypeScript port of
 [JsonSurfer](https://github.com/jsurfer/JsonSurfer) (Java).
 
+## Development
+
+`npm test` runs the full suite (`vitest run`); `npm run lint` runs ESLint.
+
+Mutation testing ([Stryker](https://stryker-mutator.io/)) is available as a
+manual, opt-in check of the test suite itself — scoped to `src/main/lib/path/`
+and `src/main/lib/context/`, the two directories with the deepest and
+most bug-prone matching/streaming logic per this project's own issue
+history. It is deliberately **not** wired into CI: a full run takes 15+
+minutes. To run it locally:
+
+```sh
+npx stryker run
+```
+
+This uses `stryker.conf.json` and `vitest.stryker.config.ts` (a mutation-run-only
+Vitest config that additionally excludes `src/test/06-conformance.ts` — see
+that file's own comment for why). Results are written to
+`reports/mutation/mutation.html` (gitignored, along with Stryker's
+`.stryker-tmp/` scratch directory).
+
 ## Documentation
 
 This README is the primary reference for using YAJS;
