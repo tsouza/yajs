@@ -101,10 +101,33 @@ export class GenericWalker implements FastPathDocumentEvaluator {
         }
     }
 
+    // Exposed separately (beyond walkDocument()) so the array-splitter fast
+    // path (ArrayFastPath.ts, issue #86) can drive a top-level array's
+    // elements one at a time - each parsed independently by the structural
+    // scanner + JSON.parse, rather than all at once from one already-
+    // materialized array value - while still sharing exactly one
+    // StreamPosition across the whole array, the same way StreamContext's
+    // own single long-lived position is shared across an entire array as it
+    // streams in. walkRootArrayOpen()/element()/walkRootArrayClose() below
+    // are that three-call sequence factored out of walkDocument()'s own
+    // Array.isArray(value) branch.
+    walkRootArrayOpen(): void {
+        if (!this.position) {
+            this.position = new StreamPosition(this.includeIdx, !this.path.definite);
+        }
+        if (this.hasDrop) { this.builtByNode.clear(); }
+        this.position.stepIntoArray();
+    }
+
+    walkRootArrayClose(): void {
+        this.position.stepOutArray();
+    }
+
     // A value in an already-established slot (object key slot or array
     // elements slot). Mirrors StreamContext's startObject/startArray/
-    // onValue dispatch for non-fresh positions.
-    private element(v: any): void {
+    // onValue dispatch for non-fresh positions. Public: also the per-
+    // element entry point walkRootArrayOpen() above exists for.
+    element(v: any): void {
         if (isPlainObject(v)) {
             // startObject, peek not ROOT: doOnValue -> match at current
             // position (before stepping in).
@@ -256,6 +279,36 @@ export class ChainEvaluator implements FastPathDocumentEvaluator {
         }
     }
 
+    // Element of a TOP-LEVEL ARRAY (the array-splitter fast path,
+    // ArrayFastPath.ts / issue #86) - NOT equivalent to walkDocument(): the
+    // root array has already consumed the one level of array transparency
+    // that walkDocument()'s own Array.isArray(value) branch would apply, so
+    // an element that is itself an array is opaque here (never further
+    // flattened - for `$` it is the emitted unit itself), and an element
+    // object may start the key chain directly. `elemIdx` is used only when
+    // pathIncludeArrayIndex is on (it becomes the path's leading segment -
+    // see ArrayFastPath.ts's index-rebasing comment for why the caller, not
+    // this class, owns that running counter).
+    walkElement(el: any, elemIdx: number): void {
+        const trail: Array<string | number> = this.includeIdx ? [elemIdx] : null;
+        if (this.keys.length === 0) {
+            // `$`: each element of the matched root array is emitted whole
+            // (mirrors terminal()'s array-streaming branch one level up).
+            this.emitOne(el, this.includeIdx ? [] : null, this.includeIdx ? elemIdx : -1);
+            return;
+        }
+        if (isPlainObject(el)) {
+            if (this.includeIdx) {
+                this.step(el, 0, trail);
+            } else {
+                this.stepNoIdx(el, 0);
+            }
+        }
+        // array or scalar element: dead end for a non-empty key chain -
+        // exactly like a scalar/array reached mid-chain in stepNoIdx()/
+        // step() above.
+    }
+
     // Fast variant: no array indices in paths -> the emitted path is
     // constant (this.constPath), so no trail needs to be threaded through.
     private stepNoIdx(v: any, i: number): void {
@@ -360,10 +413,17 @@ export class ChainEvaluator implements FastPathDocumentEvaluator {
 // Front door: compile a selector into the best evaluator.
 // ---------------------------------------------------------------------------
 
-export interface CompiledFastPath {
-    evaluator: FastPathDocumentEvaluator;
-    kind: 'chain' | 'generic';
-}
+// A discriminated union (not just the narrower FastPathDocumentEvaluator
+// interface) so a caller that needs the concrete class - the array-splitter
+// fast path (ArrayFastPath.ts), which drives ChainEvaluator.walkElement()
+// or GenericWalker.walkRootArrayOpen()/element()/walkRootArrayClose()
+// directly instead of walkDocument() - can narrow on `kind` and get it,
+// while NdjsonFastPath.ts's own `evaluator: FastPathDocumentEvaluator`
+// field keeps working unchanged (both members still structurally satisfy
+// that interface).
+export type CompiledFastPath =
+    | { evaluator: ChainEvaluator; kind: 'chain' }
+    | { evaluator: GenericWalker; kind: 'generic' };
 
 export function compileFastPathEvaluator(yajsPath: YAJSPath, options: FastPathOptions,
                                           emit: EmitFn): CompiledFastPath {
