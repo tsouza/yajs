@@ -40,7 +40,7 @@ were found and fixed. Issue/PR links: [issues](https://github.com/tsouza/yajs/is
   combined, the project gate evaluates first, against the object's full, undropped top-level keys, and
   drop-keys is applied second — so a regex-based gate matching on a key that drop-keys then removes is not a
   contradiction. See the README's "Regex filter primitive" and "Drop keys" sections for worked examples —
-  [#95](https://github.com/tsouza/yajs/issues/95), [#96](https://github.com/tsouza/yajs/issues/96), PR #99
+  [#95](https://github.com/tsouza/yajs/issues/95), [#96](https://github.com/tsouza/yajs/issues/96), [PR #98](https://github.com/tsouza/yajs/pull/98)
 
 ### Modernization
 
