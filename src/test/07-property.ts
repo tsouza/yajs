@@ -214,6 +214,40 @@ describe('yajs property-based round-trip', () => {
         expect(actual).to.deep.equal([{ path: [], value: '' }]);
     });
 
+    // Regression property for GitHub issue #76 / PR #81: StreamContext now
+    // reuses a single StreamPosition across successive NDJSON records
+    // (StreamPosition.reinitialize()) instead of allocating a fresh one per
+    // record. Cross-checks a multi-record NDJSON stream's output against
+    // each record run through its own, fully isolated yajs() call - the
+    // strongest possible "nothing leaks between records" property,
+    // independent of any hand-computed expectation: whatever internal state
+    // (position bookkeeping, ancestor-key cache, path-segment cache)
+    // survives the reused StreamPosition between records must have
+    // literally zero observable effect, for ANY selector/record
+    // combination, or this fails. Complements the specific hand-picked
+    // adversarial cases in 03-yajs.ts's "StreamPosition reuse does not leak
+    // state" describe block with broad randomized coverage.
+    it('produces the same result for a multi-record NDJSON stream as running each record through its own isolated yajs() call (issue #76)', () =>
+        fc.assert(
+            fc.asyncProperty(
+                fc.array(rootSafeValueArbitrary, { minLength: 1, maxLength: 6 }),
+                fc.constantFrom('$', '$.*', '$..a', '$..*', '$.a..a'),
+                fc.boolean(),
+                async (records, selector, includeIdx) => {
+                    const jsons = records.map((r) => JSON.stringify(r));
+
+                    const isolated: any[] = [];
+                    for (const json of jsons) {
+                        isolated.push(...await runYajsSelector(selector, Buffer.from(json), includeIdx));
+                    }
+
+                    const combined = await runYajsSelector(selector, Buffer.from(jsons.join('\n')), includeIdx);
+
+                    expect(combined).to.deep.equal(isolated);
+                }),
+            { numRuns: NUM_RUNS },
+        ), 30000);
+
     // Fixed regression for GitHub issue #12: an object key literally named
     // "__proto__" must become a real own data property, like native
     // JSON.parse, rather than reassigning the built object's actual
@@ -275,6 +309,26 @@ function runYajs(buffer: Buffer, chunkSizes?: number[]): Promise<any[]> {
                 sizeIdx += 1;
             }
         }
+        stream.end();
+    });
+}
+
+/**
+ * Same as runYajs() above, but against an arbitrary selector/
+ * pathIncludeArrayIndex, and resolving with just the { path, value } pairs
+ * (dropping the isTrusted/other stream-internal fields data events may
+ * carry) so an isolated single-record run and a same-selector slice of a
+ * multi-record combined run compare equal by plain deep-equality.
+ */
+function runYajsSelector(selector: string, buffer: Buffer, pathIncludeArrayIndex: boolean): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+        const result: any[] = [];
+        const stream = yajs(selector, { pathIncludeArrayIndex });
+        stream.
+            on('data', (data: any) => result.push({ path: data.path, value: data.value })).
+            on('end', () => resolve(result)).
+            on('error', (err: Error) => reject(err));
+        stream.write(buffer);
         stream.end();
     });
 }
