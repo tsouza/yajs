@@ -1,8 +1,11 @@
 import through from 'through';
 import { ThroughStream } from 'through';
 import { StreamContext } from './lib/context/StreamContext';
+import { NdjsonFastPath } from './lib/fastpath/NdjsonFastPath';
 import { YAJSPath } from './lib/path/YAJSPath';
 import { JsonSaxParser } from './lib/utils/JsonSaxParser';
+
+type EmitFn = (path: Array<string | number>, value: any) => void;
 
 /**
  * The shape of each `'data'` event emitted by a yajs stream: the location of
@@ -25,6 +28,67 @@ export interface YAJSOptions {
      * chunk's `path`. Defaults to false (indices are omitted).
      */
     pathIncludeArrayIndex?: boolean;
+
+    /**
+     * Opt-in NDJSON fast path (see issue #78 for the full design/measured
+     * numbers): instead of tokenizing every byte through the SAX engine,
+     * splits input on `\n` and hands each line to native `JSON.parse` plus
+     * a compiled-selector walker, falling back to the normal streaming
+     * engine - byte-for-byte identical to the non-fastPath behavior - for
+     * anything a single `JSON.parse` call can't handle on its own (a
+     * record over `fastPathMaxRecordBytes`, malformed input, a
+     * pretty-printed record spanning multiple lines, the `"""` extension,
+     * or multiple values on one line). Measured ~5x end-to-end throughput
+     * for the common "definite key chain" selector shape (e.g.
+     * `$.field2.nested`) against NDJSON input.
+     *
+     * Defaults to `false`: this is a newer, less battle-tested code path
+     * than the default engine, and - unlike `pathIncludeArrayIndex` - it is
+     * NOT purely an output-shape option; it changes how the input is
+     * parsed and has two accepted, documented semantic divergences from
+     * the default engine (both inherent to using `JSON.parse` under the
+     * hood, not implementation bugs):
+     *
+     *   1. **Duplicate object keys**: the default engine emits one match
+     *      per occurrence of a duplicated key; `JSON.parse` (and so
+     *      `fastPath`) keeps only the last occurrence.
+     *   2. **Integer-like key emission order**: when an object's raw text
+     *      key order differs from JavaScript's own-property enumeration
+     *      order for integer-like keys (which `JSON.parse` - and so
+     *      `Object.keys()` - always reindexes ahead of string keys,
+     *      regardless of source order), the *order* matches are emitted in
+     *      for that object's siblings can differ. Values and paths are
+     *      unaffected either way.
+     *
+     * There is deliberately no "auto" mode that detects NDJSON shape on
+     * the fly - enable this only for input you know is NDJSON-shaped
+     * (whitespace/newline-separated top-level JSON values); on any other
+     * shaped input it still produces correct output (everything falls back
+     * to the real engine record-by-record), just without the speedup.
+     *
+     * One additional, purely cosmetic difference: an `error` event's
+     * message includes a byte "position", which is always relative to
+     * whichever buffer the underlying parser happened to be given (true of
+     * the default engine too - it differs for the same failure depending
+     * on how a caller chunks its own `.write()` calls) - under `fastPath`,
+     * a malformed record's position is relative to that one record's own
+     * line, since the record is handed to the fallback engine in
+     * isolation. The error is still reported for the correct record, with
+     * the same message shape and the same per-record resync guarantee
+     * (issue #50) - only that one number can differ from a non-fastPath,
+     * single-`.write()`-call run of the same input.
+     */
+    fastPath?: boolean;
+
+    /**
+     * Per-record size cutoff, in bytes of a record's raw (not yet parsed)
+     * text, above which `fastPath` routes that one record to the normal
+     * streaming engine instead of ever materializing it as a JS
+     * string/`JSON.parse` tree - guards against unbounded memory growth on
+     * an unexpectedly (or adversarially) huge single record. Only
+     * meaningful when `fastPath` is true. Defaults to 8 MiB.
+     */
+    fastPathMaxRecordBytes?: number;
 }
 
 // The declared return type is NodeJS.ReadWriteStream rather than
@@ -38,12 +102,47 @@ export interface YAJSOptions {
 export default function yajs(path: string, options: YAJSOptions = {
     pathIncludeArrayIndex: false,
 }): NodeJS.ReadWriteStream {
-    // Shared between JsonSaxParser's onError and StreamContext's onError -
-    // see the comment on flushPendingString() below for why every source of
-    // 'error' on this stream needs to mark the same flag.
-    const state = { errored: false };
+    const yajsPath = YAJSPath.parse(path);
 
-    const stream = through(
+    // The emit function every match (fast-path or default engine) is routed
+    // through: through's own queue()/push() (they're the same function -
+    // see node_modules/through/index.js) instead of stream.emit('data', ...)
+    // directly. queue() appends to through's internal buffer and only emits
+    // 'data' while `!stream.paused` (drain()), which is the only path that
+    // respects the pause Node's .pipe() applies on backpressure from a slow
+    // downstream consumer - emit('data', ...) bypasses that entirely and
+    // forces synchronous delivery regardless of consumer readiness (issue
+    // #36).
+    const emit: EmitFn = (p, value) => stream.queue({ path: p, value });
+    const reportError = (err: Error) => stream.emit('error', err);
+
+    let stream: ThroughStream;
+    if (options.fastPath) {
+        // Opt-in NDJSON fast path (see YAJSOptions.fastPath's doc comment
+        // and issue #78) - bypasses the SAX tokenizer entirely for input
+        // JSON.parse can handle a line at a time, falling back to a normal
+        // engine instance (createEngine - the exact same one the default,
+        // non-fastPath branch below uses) for anything it can't.
+        const fastPath = new NdjsonFastPath(yajsPath, options, emit, reportError,
+            (onBoundary) => {
+                const parser = createEngine(yajsPath, options, emit, reportError, onBoundary);
+                return {
+                    write: (buf: Buffer) => parser.parse(buf),
+                    finish: () => { parser.finish(); parser.flushPendingString(); },
+                };
+            });
+        stream = through(
+            (chunk: Buffer | string) => fastPath.write(typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
+            () => {
+                fastPath.end();
+                // See the matching stream.queue(null) comment in the
+                // default (non-fastPath) branch below - same reasoning.
+                stream.queue(null);
+            });
+        return stream;
+    }
+
+    stream = through(
         // `through`'s own write() (node_modules/through/index.js) does no
         // string-to-Buffer coercion - it hands whatever was passed to
         // .write()/.pipe() straight through to this callback. JsonSaxParser
@@ -79,30 +178,39 @@ export default function yajs(path: string, options: YAJSOptions = {
             stream.queue(null);
         });
 
-    const yajsPath = YAJSPath.parse(path);
-    const context = new StreamContext(yajsPath,
-        // Route matches through through's own queue()/push() (they're the same
-        // function - see node_modules/through/index.js) instead of
-        // stream.emit('data', ...) directly. queue() appends to through's
-        // internal buffer and only emits 'data' while `!stream.paused`
-        // (drain()), which is the only path that respects the pause Node's
-        // .pipe() applies on backpressure from a slow downstream consumer -
-        // emit('data', ...) bypasses that entirely and forces synchronous
-        // delivery regardless of consumer readiness (issue #36).
-        (p, value) => stream.queue({ path: p, value }),
-        options.pathIncludeArrayIndex,
-        (err) => {
-            state.errored = true;
-            stream.emit('error', err);
-        });
-
-    const parser = createSaxParser(context, stream, state);
+    const parser = createEngine(yajsPath, options, emit, reportError);
 
     return stream;
 }
 
-function createSaxParser(context: StreamContext, stream: ThroughStream,
-                          state: { errored: boolean }): any {
+// Builds one full StreamContext+JsonSaxParser pair, wired together exactly
+// as the original single-engine yajs() pipeline always did. Factored out so
+// both the default (non-fastPath) branch above and the fastPath branch's
+// on-demand fallback-engine factory (see NdjsonFastPath.ts) build identical,
+// independent engine instances - each with its own local `errored` state
+// (see createSaxParser below), sharing only `emit`/`reportError` (which
+// route to the one `stream` both branches ultimately return).
+// `onBoundary`, when given, is threaded into createSaxParser - see its own
+// comment for why the fast path needs it.
+function createEngine(yajsPath: YAJSPath, options: YAJSOptions, emit: EmitFn,
+                       reportError: (err: Error) => void, onBoundary?: () => void): any {
+    // Shared between JsonSaxParser's onError and StreamContext's onError -
+    // see the comment on flushPendingString() in createSaxParser for why
+    // every source of 'error' for THIS engine instance needs to mark the
+    // same flag. Local to this instance (not shared across fastPath's
+    // separate fallback-engine instances) - each is an independent NDJSON
+    // sub-stream as far as error/resync bookkeeping is concerned.
+    const state = { errored: false };
+    const context = new StreamContext(yajsPath, emit, options.pathIncludeArrayIndex,
+        (err) => { state.errored = true; reportError(err); });
+    return createSaxParser(context, state, reportError, onBoundary);
+}
+
+// `onBoundary`, when given, fires alongside onResync/onValueBoundary below -
+// see NdjsonFastPath.ts for why the fast path needs to know exactly when
+// the underlying engine is back at a clean top-level-record boundary.
+function createSaxParser(context: StreamContext, state: { errored: boolean },
+                          onError: (err: Error) => void, onBoundary?: () => void): any {
     let strValue;
 
     // Once any source of error on this stream (JsonSaxParser's own grammar,
@@ -148,7 +256,7 @@ function createSaxParser(context: StreamContext, stream: ThroughStream,
         },
         onError: (err) => {
             state.errored = true;
-            stream.emit('error', err);
+            onError(err);
         },
         onNull: () => {
             strValue = null;
@@ -171,6 +279,11 @@ function createSaxParser(context: StreamContext, stream: ThroughStream,
             strValue = null;
             state.errored = false;
             context.resyncAfterError();
+            // A resync is itself a clean top-level-record boundary (the
+            // next byte starts a fresh document - see JsonSaxParser's own
+            // resyncAfterError()) - see NdjsonFastPath.ts for why the fast
+            // path needs to know this.
+            onBoundary?.();
         },
         onNumber: (num) => {
             strValue = null;
@@ -206,7 +319,10 @@ function createSaxParser(context: StreamContext, stream: ThroughStream,
         // that's actually failing, not one already confirmed complete before
         // it. Firing the flush right here, before any byte of the next
         // record is even parsed, sidesteps both failure modes.
-        onValueBoundary: () => flushPendingString(),
+        onValueBoundary: () => {
+            flushPendingString();
+            onBoundary?.();
+        },
     } as JsonSaxParser.ICallbacks);
 
     parser.flushPendingString = flushPendingString;
