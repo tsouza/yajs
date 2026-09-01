@@ -521,6 +521,59 @@ export class JsonSaxParser {
         continue;
       case STRING1: // After open quote
         n = buffer[i];
+        // Fast path: batch a run of plain ASCII content bytes into a single
+        // slice-and-append instead of one String.fromCharCode()/concat per
+        // byte. Entry conditions keep this byte-for-byte equivalent to the
+        // per-byte path below:
+        //  - `n < 0x80` (ASCII): non-ASCII bytes always go through
+        //    appendUtf8Byte() so the WHATWG incremental decoder (and its
+        //    malformed-sequence replacement behavior) stays the single
+        //    source of truth for anything UTF-8-related.
+        //  - `utf8BytesNeeded === 0`: an ASCII byte arriving mid-way through
+        //    a multi-byte UTF-8 sequence is an invalid continuation byte and
+        //    must reach appendUtf8Byte() to emit the U+FFFD for the aborted
+        //    sequence first.
+        //  - excluded delimiters (`"` always; `\` only outside tdq, where it
+        //    starts an escape) and control bytes (< 0x20; except `\r`/`\n`
+        //    inside tdq) terminate the run and are reprocessed by the
+        //    per-byte path at their own index, so error positions and
+        //    escape/close handling are unchanged.
+        // ASCII is a subset of latin1, so latin1Slice() is a correct (and
+        // allocation-cheap) way to materialize the run.
+        if (this.utf8BytesNeeded === 0 && n < 0x80 && n >= 0x20 &&
+            n !== 0x22 && (n !== 0x5c || this.tdq)) {
+          let j = i + 1;
+          if (this.tdq) {
+            while (j < l) {
+              n = buffer[j];
+              if (n >= 0x80 || n === 0x22 || (n < 0x20 && n !== 0x0a && n !== 0x0d)) { break; }
+              j++;
+            }
+          } else {
+            while (j < l) {
+              n = buffer[j];
+              if (n >= 0x80 || n === 0x22 || n === 0x5c || n < 0x20) { break; }
+              j++;
+            }
+          }
+          // Materialization strategy: latin1Slice() is one C++ call with a
+          // flat per-call cost regardless of length, while a JS
+          // String.fromCharCode loop costs per character - measured
+          // crossover is in the mid-single-digit chars, so slice only pays
+          // for itself on longer runs (16 leaves comfortable margin). Either way the win over the
+          // per-byte slow path is skipping the outer state dispatch,
+          // appendUtf8Byte() call, and `this.str` accessor round-trip per
+          // content byte.
+          if (j - i >= 16) {
+            this.str += (buffer as any).latin1Slice(i, j);
+          } else {
+            let s = this.str;
+            for (let k = i; k < j; k++) { s += String.fromCharCode(buffer[k]); }
+            this.str = s;
+          }
+          i = j - 1; // resume at the terminator (loop's i++ lands on j)
+          continue;
+        }
         switch (n) {
         case 0x22: // `"`
           // A `"` byte can never be a legal UTF-8 continuation byte (those
@@ -627,7 +680,15 @@ export class JsonSaxParser {
           this.numStr += String.fromCharCode(n); this.state = NUMBER6; continue;
         }
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.numStr += String.fromCharCode(n);
+          // Fast path (same batching idea as the STRING1 run-scanner above):
+          // consume the whole run of consecutive digits in one slice instead
+          // of one append per digit. The state doesn't change while digits
+          // keep arriving, and the terminating byte is reprocessed at its
+          // own index by the ordinary code, so this is behavior-preserving.
+          let j = i + 1;
+          while (j < l && buffer[j] >= 0x30 && buffer[j] <= 0x39) { j++; }
+          this.numStr += (buffer as any).latin1Slice(i, j);
+          i = j - 1;
           continue;
         }
         this.flushPendingNumber();
@@ -645,7 +706,11 @@ export class JsonSaxParser {
       case NUMBER5: // * After digit (after period)
         n = buffer[i];
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.numStr += String.fromCharCode(n);
+          // Same digit-run batching as NUMBER3 above.
+          let j = i + 1;
+          while (j < l && buffer[j] >= 0x30 && buffer[j] <= 0x39) { j++; }
+          this.numStr += (buffer as any).latin1Slice(i, j);
+          i = j - 1;
           continue;
         }
         if (n === 0x65 || n === 0x45) { // E/e
@@ -682,7 +747,11 @@ export class JsonSaxParser {
       case NUMBER8: // * After digit (after +/-)
         n = buffer[i];
         if (n >= 0x30 && n <= 0x39) { // 0-9
-          this.numStr += String.fromCharCode(n);
+          // Same digit-run batching as NUMBER3 above.
+          let j = i + 1;
+          while (j < l && buffer[j] >= 0x30 && buffer[j] <= 0x39) { j++; }
+          this.numStr += (buffer as any).latin1Slice(i, j);
+          i = j - 1;
           continue;
         }
         this.flushPendingNumber();
