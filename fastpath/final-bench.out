@@ -1,0 +1,56 @@
+{"group":"ndjson-hot","rep":1,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":26428.6}
+{"group":"ndjson-hot","rep":1,"mode":"chain","selector":"$.field2.nested","count":2000000,"ms":4055.8}
+{"group":"ndjson-hot","rep":1,"mode":"hybrid","selector":"$.field2.nested","count":2000000,"ms":3217.1}
+#  08:41:10 up 10 days,  6:43,  8 users,  load average: 13.89, 17.34, 20.39
+{"group":"ndjson-hot","rep":2,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":40855.8}
+{"group":"ndjson-hot","rep":2,"mode":"chain","selector":"$.field2.nested","count":2000000,"ms":8590}
+{"group":"ndjson-hot","rep":2,"mode":"hybrid","selector":"$.field2.nested","count":2000000,"ms":3264.3}
+#  08:42:04 up 10 days,  6:44,  8 users,  load average: 21.54, 18.87, 20.74
+{"group":"ndjson-hot","rep":3,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":28313.4}
+{"group":"ndjson-hot","rep":3,"mode":"chain","selector":"$.field2.nested","count":2000000,"ms":5064.1}
+{"group":"ndjson-hot","rep":3,"mode":"hybrid","selector":"$.field2.nested","count":2000000,"ms":4540.4}
+#  08:42:44 up 10 days,  6:44,  8 users,  load average: 27.16, 20.57, 21.23
+{"group":"ndjson-hot","rep":4,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":33409.9}
+{"group":"ndjson-hot","rep":4,"mode":"chain","selector":"$.field2.nested","count":2000000,"ms":10169.7}
+{"group":"ndjson-hot","rep":4,"mode":"hybrid","selector":"$.field2.nested","count":2000000,"ms":3567.7}
+#  08:43:33 up 10 days,  6:45,  8 users,  load average: 26.93, 21.51, 21.51
+{"group":"ndjson-hot","rep":5,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":37399}
+{"group":"ndjson-hot","rep":5,"mode":"chain","selector":"$.field2.nested","count":2000000,"ms":5455.5}
+{"group":"ndjson-hot","rep":5,"mode":"hybrid","selector":"$.field2.nested","count":2000000,"ms":3656.3}
+#  08:44:21 up 10 days,  6:46,  8 users,  load average: 23.51, 21.47, 21.50
+{"group":"array-hot","rep":1,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":25242.5}
+{"group":"array-hot","rep":1,"mode":"achain","selector":"$.field2.nested","count":2000000,"ms":6836.7,"maxPending":79}
+#  08:44:54 up 10 days,  6:46,  8 users,  load average: 22.11, 21.35, 21.46
+{"group":"array-hot","rep":2,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":18421.6}
+{"group":"array-hot","rep":2,"mode":"achain","selector":"$.field2.nested","count":2000000,"ms":7475,"maxPending":79}
+#  08:45:21 up 10 days,  6:47,  8 users,  load average: 18.11, 20.48, 21.17
+{"group":"array-hot","rep":3,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":14782.1}
+{"group":"array-hot","rep":3,"mode":"achain","selector":"$.field2.nested","count":2000000,"ms":3806.2,"maxPending":79}
+#  08:45:40 up 10 days,  6:47,  8 users,  load average: 15.62, 19.77, 20.92
+{"group":"array-hot","rep":4,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":13726.4}
+{"group":"array-hot","rep":4,"mode":"achain","selector":"$.field2.nested","count":2000000,"ms":2751.8,"maxPending":79}
+#  08:45:57 up 10 days,  6:47,  8 users,  load average: 13.85, 19.10, 20.68
+{"group":"array-hot","rep":5,"mode":"real","selector":"$.field2.nested","count":2000000,"ms":9080.7}
+{"group":"array-hot","rep":5,"mode":"achain","selector":"$.field2.nested","count":2000000,"ms":2741.1,"maxPending":79}
+#  08:46:09 up 10 days,  6:48,  8 users,  load average: 13.41, 18.83, 20.57
+{"group":"ndjson-descend","rep":1,"mode":"real","selector":"$..*","count":6000000,"ms":15243.8}
+{"group":"ndjson-descend","rep":1,"mode":"generic","selector":"$..*","count":6000000,"ms":6376.8}
+#  08:46:31 up 10 days,  6:48,  8 users,  load average: 10.66, 17.86, 20.21
+{"group":"ndjson-descend","rep":2,"mode":"real","selector":"$..*","count":6000000,"ms":25644.4}
+{"group":"ndjson-descend","rep":2,"mode":"generic","selector":"$..*","count":6000000,"ms":12677.6}
+#  08:47:10 up 10 days,  6:49,  8 users,  load average: 15.84, 18.22, 20.23
+{"group":"ndjson-descend","rep":3,"mode":"real","selector":"$..*","count":6000000,"ms":26588.2}
+{"group":"ndjson-descend","rep":3,"mode":"generic","selector":"$..*","count":6000000,"ms":13965.1}
+#  08:47:51 up 10 days,  6:49,  8 users,  load average: 17.82, 18.52, 20.25
+{"group":"ndjson-miss","rep":1,"mode":"real","selector":"$.field2.missing","count":0,"ms":28677.8}
+{"group":"ndjson-miss","rep":1,"mode":"chain","selector":"$.field2.missing","count":0,"ms":4667.2}
+{"group":"ndjson-miss","rep":1,"mode":"hybrid","selector":"$.field2.missing","count":0,"ms":1228.9}
+#  08:48:28 up 10 days,  6:50,  8 users,  load average: 20.94, 19.15, 20.39
+{"group":"ndjson-miss","rep":2,"mode":"real","selector":"$.field2.missing","count":0,"ms":9525.8}
+{"group":"ndjson-miss","rep":2,"mode":"chain","selector":"$.field2.missing","count":0,"ms":2366.4}
+{"group":"ndjson-miss","rep":2,"mode":"hybrid","selector":"$.field2.missing","count":0,"ms":752.2}
+#  08:48:41 up 10 days,  6:50,  8 users,  load average: 17.74, 18.53, 20.16
+{"group":"ndjson-miss","rep":3,"mode":"real","selector":"$.field2.missing","count":0,"ms":12893.4}
+{"group":"ndjson-miss","rep":3,"mode":"chain","selector":"$.field2.missing","count":0,"ms":4320.6}
+{"group":"ndjson-miss","rep":3,"mode":"hybrid","selector":"$.field2.missing","count":0,"ms":1118.7}
+#  08:49:01 up 10 days,  6:50,  8 users,  load average: 17.05, 18.34, 20.08
