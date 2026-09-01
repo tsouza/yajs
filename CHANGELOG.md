@@ -25,7 +25,7 @@ were found and fixed. Issue/PR links: [issues](https://github.com/tsouza/yajs/is
   for the mechanism (discard-and-replace, replacing the old park+inject
   recorder stack), and note the opt-in `fastPath` walker does **not**
   implement this yet — it still emits every overlapping match, a known,
-  separately-tracked divergence — [#89](https://github.com/tsouza/yajs/issues/89)
+  separately-tracked divergence — [#89](https://github.com/tsouza/yajs/issues/89), [PR #94](https://github.com/tsouza/yajs/pull/94)
 
 ### Modernization
 
