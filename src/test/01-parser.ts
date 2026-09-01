@@ -1,6 +1,6 @@
 import { ANTLRInputStream, CommonTokenStream } from 'antlr4ts';
 
-import { buildArgsExpression, extractKeys } from '../main/lib/path/parser/utils';
+import { buildArgsExpression, containsRegexTerm, extractKeys } from '../main/lib/path/parser/utils';
 import { YAJSLexer } from '../main/lib/path/parser/YAJSLexer';
 import { YAJSParser } from '../main/lib/path/parser/YAJSParser';
 
@@ -218,6 +218,59 @@ describe('path parser', () => {
             expect(() => extractKeys(filter.filterExpression())).to.not.throw();
             expect(extractKeys(filter.filterExpression())).to.deep.equal(['key1']);
             expect(buildArgsExpression(filter.filterExpression())).to.equal('args["key1"]');
+        });
+    });
+
+    // Unit tests for GitHub issue #96's regex filter primitive at the
+    // parser/compiler level (extractKeys()/buildArgsExpression()/
+    // containsRegexTerm()) - end-to-end matching behavior is covered in
+    // 03-yajs.ts, and the project+drop-keys combination gate it unlocks is
+    // covered in 02-path.ts.
+    describe('regex filter primitive (issue #96)', () => {
+
+        it('extracts a bare regex term\'s full delimited text as its "key"', () => {
+            const parser = createParser('$.test{/^key\\d+$/}');
+            const projection = parser.path().pathLeaf().actionProject();
+            expect(extractKeys(projection.filterExpression())).to.deep.equal(['/^key\\d+$/']);
+        });
+
+        it('renders a regex term identically to a bare key - an args[...] lookup keyed by its own raw text', () => {
+            const parser = createParser('$.test{/^key\\d+$/}');
+            const projection = parser.path().pathLeaf().actionProject();
+            expect(buildArgsExpression(projection.filterExpression())).to.equal('args["/^key\\\\d+$/"]');
+        });
+
+        it('composes with bare keys and boolean operators exactly like any other primitive', () => {
+            const parser = createParser('$.test{foo && /^key\\d+$/}');
+            const projection = parser.path().pathLeaf().actionProject();
+            expect(extractKeys(projection.filterExpression())).to.deep.equal(['foo', '/^key\\d+$/']);
+            expect(buildArgsExpression(projection.filterExpression())).
+                to.equal('args["foo"]&&args["/^key\\\\d+$/"]');
+        });
+
+        it('rejects an over-long regex pattern with a clean, catchable error, not a raw one from deep inside RegExp/vm', () => {
+            const pattern = 'a'.repeat(201);
+            const parser = createParser(`$.test{/${pattern}/}`);
+            const projection = parser.path().pathLeaf().actionProject();
+            expect(() => extractKeys(projection.filterExpression())).to.throw(/maximum allowed length/);
+        });
+
+        it('rejects invalid regex syntax with a clean, catchable error', () => {
+            const parser = createParser('$.test{/[/}');
+            const projection = parser.path().pathLeaf().actionProject();
+            expect(() => extractKeys(projection.filterExpression())).to.throw(/Invalid regex filter pattern/);
+        });
+
+        it('containsRegexTerm() reports true only when a regex term is actually present', () => {
+            const withRegex = createParser('$.test{foo && /bar/}').path().pathLeaf().actionProject();
+            const withoutRegex = createParser('$.test{foo && bar}').path().pathLeaf().actionProject();
+            expect(containsRegexTerm(withRegex.filterExpression())).to.be.true;
+            expect(containsRegexTerm(withoutRegex.filterExpression())).to.be.false;
+        });
+
+        it('containsRegexTerm() finds a regex term nested inside parens/NOT', () => {
+            const nested = createParser('$.test{!(foo || /bar/)}').path().pathLeaf().actionProject();
+            expect(containsRegexTerm(nested.filterExpression())).to.be.true;
         });
     });
 });

@@ -1,3 +1,4 @@
+import { isRegexFilterKey, parseRegexFilterKey } from '../../utils/ScriptFilterHelper';
 import { FilterExpressionContext, FilterExpressionTermContext } from './YAJSParser';
 
 // -----------------------------------------------------------------------
@@ -12,6 +13,8 @@ import { FilterExpressionContext, FilterExpressionTermContext } from './YAJSPars
 //     | op=NOT term=filterExpressionTerm          // ctx._op (!)     + ctx._term
 //     | LP expr=filterExpression RP               // ctx._expr (a FilterExpressionContext, NOT a term!)
 //     | key=FilterExpressionTerm                  // ctx._key
+//     | regex=REGEX                               // ctx._regex (issue #96) - text INCLUDES the
+//                                                  // delimiting slashes, e.g. "/^key\\d+$/"
 //     ;
 //
 // A FilterExpressionContext is therefore a flat *list* of sibling
@@ -91,6 +94,17 @@ function doExtractKeysFromExpression(ctx: FilterExpressionContext, keys: any): v
 function doExtractKeys(ctx: FilterExpressionTermContext, keys: any, stack: KeyWorkItem[]): void {
     if (ctx._key && ctx._key.text) {
         keys[ctx._key.text] = true;
+    } else if (ctx._regex && ctx._regex.text) {
+        // Validate eagerly here (parse time) so a malformed/over-long
+        // pattern fails fast - see issues #18/#19's "malformed selectors
+        // fail cleanly" precedent, and ScriptFilterHelper.ts's own
+        // parseRegexFilterKey() comment for why this doesn't duplicate a
+        // security boundary, just moves a cheap, redundant compile-and-
+        // discard earlier. The compiled RegExp itself is discarded here;
+        // ScriptFilterHelper recompiles (and this time keeps) it once more
+        // at construction time for actual matching use.
+        parseRegexFilterKey(ctx._regex.text);
+        keys[ctx._regex.text] = true;
     } else if (ctx._expr) {
         // Parenthesized group: `(expr)` - ctx._expr is a FilterExpressionContext
         // (a nested term list), not a FilterExpressionTermContext, so it needs
@@ -138,40 +152,55 @@ export function assertFlatKeyExpression(ctx: FilterExpressionContext): void {
     const isBareKeyTerm = (term: FilterExpressionTermContext) => !!(term._key && term._key.text);
     if (!ctx.filterExpressionTerm().every(isBareKeyTerm)) {
         throw new Error('Drop-keys (<...>) doesn\'t support boolean operators ' +
-            '(&&, ||, !) or parentheses - it only accepts a flat, ' +
+            '(&&, ||, !), parentheses, or a regex filter (/.../ ) - it only accepts a flat, ' +
             'space-separated list of key names to always drop, e.g. <key1 key2>.');
     }
 }
 
-// Issue #52: pathLeaf's own grammar rule (`pathLeaf: actionProject |
-// actionDropKeys` - see YAJS.g4) already makes project (`{...}`) and
-// drop-keys (`<...>`) mutually exclusive: a selector may end in at most one
-// of them. But when a selector nevertheless writes both (e.g. `$.a{x}<y>`),
-// there's no grammar rule for "this specific illegal combination" - pathLeaf
-// just matches whichever one comes first (here, actionProject), leaving the
-// second one as unconsumed trailing input that only fails once the parser
-// reaches EOF and finds it still there. That surfaces as a raw, internal
-// ANTLR message ("mismatched input '<' expecting <EOF>") that never says
-// WHY the selector is invalid - unlike the purpose-built message issue #29
-// added for drop-keys' own boolean-operator restriction (see
-// assertFlatKeyExpression above). This is the equivalent purpose-built check
-// for the project/drop-keys combination.
+// True iff `ctx` contains a regex filter term (issue #96, e.g. `/^key\d+$/`)
+// anywhere in its boolean structure - reuses extractKeys()'s own flattening
+// walk (both need to visit every leaf term the same way) rather than
+// re-implementing a second tree walk that has to be kept in sync with it.
+// Used by assertProjectAndDropKeysCombinable() below to decide whether a
+// project+drop-keys combination is allowed at all.
+export function containsRegexTerm(ctx: FilterExpressionContext): boolean {
+    return extractKeys(ctx).some(isRegexFilterKey);
+}
+
+// Issue #52 (original restriction) / #95 (amended, see below): pathLeaf's
+// grammar rule (see YAJS.g4) now parses BOTH written orders of project
+// (`{...}`) and drop-keys (`<...>`) appearing together, specifically so a
+// selector combining them the "wrong" way surfaces this purpose-built
+// message instead of a raw, internal ANTLR one - the actual legality check
+// is semantic (issue #95: allowed only in the project-then-drop-keys order,
+// AND only when at least one side uses a regex primitive - issue #96) and
+// so belongs here, post-parse, rather than in the grammar itself. Called
+// from YAJSPath.ts's Visitor.visitPathLeaf() only when BOTH an actionProject
+// and an actionDropKeys child are present; a selector using at most one of
+// them never reaches this function at all.
 //
-// `{`, `}`, `<`, `>` are reserved structural characters excluded from both
-// Identifier's and FilterExpressionTerm's character classes (see YAJS.g4),
-// so they can only ever appear as actionProject/actionDropKeys' own LB/RB/
-// LT/GT delimiters - never inside a key name, a filter value, or anywhere
-// else a selector's own content can legitimately place them. That makes a
-// plain substring check on the raw, unparsed selector safe: if both a `{`
-// and a `<` appear anywhere in it, the selector necessarily attempts to use
-// both project and drop-keys, and it's rejected here - before parsing -
-// with a message that names the actual constraint instead of an internal
-// ANTLR token diff.
-export function assertProjectAndDropKeysNotCombined(path: string): void {
-    if (path.indexOf('{') !== -1 && path.indexOf('<') !== -1) {
+// This used to be a cheap pre-parse raw-substring check ("do both `{` and
+// `<` appear anywhere in the unparsed selector text") - safe back when `{`,
+// `}`, `<`, `>` were reserved structural characters excluded from every
+// other token's character class (see YAJS.g4's Identifier/
+// FilterExpressionTerm). REGEX's own character class does NOT exclude any
+// of them, though (a regex pattern can legitimately contain a literal `<`
+// or `{`, e.g. `{/a<b/}`), so a raw-text scan can no longer reliably tell a
+// real drop-keys/project delimiter apart from one that merely appears
+// inside a regex pattern's own content - hence the move to a post-parse,
+// tree-based check, where REGEX content is already correctly set apart from
+// real structural delimiters by the parser itself.
+export function assertProjectAndDropKeysCombinable(
+        projectExpression: FilterExpressionContext, dropKeysExpression: FilterExpressionContext,
+        forwardOrder: boolean): void {
+    const combinable = forwardOrder &&
+        (containsRegexTerm(projectExpression) || containsRegexTerm(dropKeysExpression));
+    if (!combinable) {
         throw new Error(
             'A selector can\'t combine project ({...}) and drop-keys (<...>) - ' +
-            'they are mutually exclusive; use only one of them.');
+            'they are mutually exclusive; use only one of them - UNLESS at least one of the ' +
+            'two uses a regex filter (/pattern/), in which case they may be combined as ' +
+            '`{...}<...>` (project first, then drop-keys), e.g. `$.a{/re/}<key2>`.');
     }
 }
 
@@ -255,15 +284,22 @@ function renderExpression(rootCtx: FilterExpressionContext): string {
             }
             case 'RENDER_TERM': {
                 const ctx = instr.ctx;
-                if (ctx._key && ctx._key.text) {
+                if ((ctx._key && ctx._key.text) || (ctx._regex && ctx._regex.text)) {
                     // JSON.stringify (not manual `'${...}'` wrapping) so a key
+                    // (or, per issue #96, a regex term's full delimited text)
                     // containing a quote, backslash, or control character
                     // produces a correctly-escaped string literal instead of
                     // breaking out of it - this string is compiled as real
                     // JavaScript via vm.runInContext in ScriptFilterHelper, so
                     // unescaped interpolation here is exactly the kind of bug
-                    // that leads to code injection (issue #17).
-                    const rendered: RenderedTerm = { op: null, text: `args[${JSON.stringify(ctx._key.text)}]` };
+                    // that leads to code injection (issue #17). A regex term
+                    // renders identically to a bare key here - both are just
+                    // an `args[...]` lookup keyed by the term's own raw text;
+                    // ScriptFilterHelper is what tells them apart (by content
+                    // shape, see isRegexFilterKey()) when actually building
+                    // `args`.
+                    const text = ctx._key ? ctx._key.text : ctx._regex.text;
+                    const rendered: RenderedTerm = { op: null, text: `args[${JSON.stringify(text)}]` };
                     values.push(rendered);
                 } else if (ctx._expr) {
                     // Parenthesized group: `(expr)`. ctx._expr is the nested

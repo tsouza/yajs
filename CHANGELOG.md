@@ -27,6 +27,21 @@ were found and fixed. Issue/PR links: [issues](https://github.com/tsouza/yajs/is
   implement this yet — it still emits every overlapping match, a known,
   separately-tracked divergence — [#89](https://github.com/tsouza/yajs/issues/89), [PR #94](https://github.com/tsouza/yajs/pull/94)
 
+### New features
+
+- **Regex filter primitive** (`{/pattern/}` / `[/pattern/]`), generalizing the existing bare-key-presence
+  filter primitive from "is this exact key present" to "is there a key matching this pattern present" — an
+  existential match against the same key set the bare-key primitive already tests (the matched object's own
+  top-level keys for project `{...}`, the ancestor keys traversed along the descent path for a path filter
+  `..[<filter>]<key>`). Composes with the existing boolean grammar (`&&`, `||`, `!`, parens, bare keys)
+  exactly like any other primitive. **Project (`{...}`) and drop-keys (`<...>`) can now be combined** — in
+  the `{...}<...>` written order only — but ONLY when at least one side uses this new regex primitive; a
+  pure-literal combination (`{key1}<key2>`, no regex anywhere) stays rejected exactly as before. When
+  combined, the project gate evaluates first, against the object's full, undropped top-level keys, and
+  drop-keys is applied second — so a regex-based gate matching on a key that drop-keys then removes is not a
+  contradiction. See the README's "Regex filter primitive" and "Drop keys" sections for worked examples —
+  [#95](https://github.com/tsouza/yajs/issues/95), [#96](https://github.com/tsouza/yajs/issues/96), [PR #98](https://github.com/tsouza/yajs/pull/98)
+
 ### Modernization
 
 - TypeScript 5.9, vitest, ESLint 9, GitHub Actions CI, real test coverage (including the [JSONTestSuite](https://github.com/nst/JSONTestSuite) conformance corpus) — [PR #7](https://github.com/tsouza/yajs/pull/7)

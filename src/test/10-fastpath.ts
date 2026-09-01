@@ -70,6 +70,19 @@ describe('NDJSON fast path (opt-in, issue #78)', () => {
                 '{"a":{"__proto__":{"x":1}}}\n'],
             ['project rejects an inherited (non-own) Object.prototype name (issue #66)', '$.a{toString}',
                 '{"a":{"b":1}}\n{"a":{"toString":1}}\n'],
+            // Issues #95/#96: regex filter primitive, standalone and in the
+            // regex-gated project+drop-keys combination - both GenericWalker
+            // (via ScriptFilterHelper's keySetProvider) and ChainEvaluator
+            // (project/drop-keys at chain terminus) need to agree with the
+            // real engine on these.
+            ['regex filter primitive in project', '$.a{/^key\\d+$/}',
+                '{"a":{"key1":1,"other":2}}\n{"a":{"foo":1}}\n'],
+            ['regex filter primitive in a path filter', '$..[/^key\\d+$/]target',
+                '{"key1":{"target":"v1"}}\n{"safe":{"target":"v2"}}\n'],
+            ['regex-gated project+drop-keys combination', '$.a{/^key\\d+$/}<other>',
+                '{"a":{"key1":1,"other":2}}\n{"a":{"foo":1,"other":2}}\n'],
+            ['regex-gated combination where the gate matches on a key drop-keys then removes', '$.a{/^key1$/}<key1>',
+                '{"a":{"key1":1,"other":2}}\n'],
         ];
 
         CASES.forEach(([name, selector, input, options]) => {

@@ -12,7 +12,16 @@ export abstract class AbstractFilteredOperator extends PathOperator {
         this.filterHelper = new ScriptFilterHelper(filterKeys, filterExpression);
         this.matchFilterDelegate = this.filterHelper.isFiltered() ?
             (matches: boolean, operator: PathOperator) => matches && this.filterHelper.
-                filters((key) => operator.referencedBy(key)) :
+                filters((key) => operator.referencedBy(key), () => {
+                    // Only ever invoked when this filter actually has a
+                    // regex primitive (issue #96) - see ScriptFilterHelper's
+                    // filters()/keySetProvider comment - so a plain
+                    // bare-key/boolean filter (the common case) never pays
+                    // for this ancestor-chain walk.
+                    const keys: string[] = [];
+                    operator.collectAncestorKeys(keys);
+                    return keys;
+                }) :
             (matches: boolean, _operator: PathOperator) => matches;
     }
 

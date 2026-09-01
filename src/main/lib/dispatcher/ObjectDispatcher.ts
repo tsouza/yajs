@@ -26,11 +26,35 @@ export class ObjectDispatcher extends AbstractObjectBuilder {
                 // valueOf, hasOwnProperty, __proto__, ...) as present and
                 // make projections like $.a{toString} match objects that
                 // don't actually carry that key.
-                if (this.filterHelper.filters((key) =>
-                        Object.prototype.hasOwnProperty.call(result, key))) {
+                //
+                // Issue #95: this gate runs against `result` BEFORE
+                // dropDeferredKeys() below strips anything - i.e. against
+                // the object's full, undropped top-level key set, exactly
+                // as #95 specifies (a regex-gated project+drop-keys
+                // combination's gate sees a key that drop-keys is about to
+                // remove; see AbstractObjectBuilder's mDeferDropKeys for how
+                // construction keeps that key attached long enough for this
+                // to be possible in the first place). Object.keys(result) is
+                // the keySetProvider for the regex primitive (#96)'s
+                // existential match - only actually invoked when this
+                // filter has a regex term at all (see ScriptFilterHelper).
+                if (this.filterHelper.filters(
+                        (key) => Object.prototype.hasOwnProperty.call(result, key),
+                        () => Object.keys(result))) {
+                    this.dropDeferredKeys();
                     this.listener(result);
                 }
             } : () => this.listener(this.peek().value);
+    }
+
+    // See AbstractObjectBuilder.deferDropKeysForCombinedProject()'s own
+    // comment for the full reasoning: standalone drop-keys (no project
+    // active) keeps its original skip-during-construction behavior
+    // untouched; only when this dispatcher's own project filter is ALSO
+    // active does construction need to keep every key attached so the gate
+    // above can see the complete object.
+    protected deferDropKeysForCombinedProject(): boolean {
+        return this.filterHelper.isFiltered();
     }
 
     endObject(): boolean {

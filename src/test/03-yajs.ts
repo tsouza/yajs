@@ -468,6 +468,130 @@ describe('yajs', () => {
             }));
     });
 
+    // End-to-end coverage for GitHub issues #95 (project + drop-keys
+    // combination, gated on regex use) and #96 (the regex filter primitive
+    // itself, `{/pattern/}`), implemented together - see 01-parser.ts for
+    // parser/compiler-level unit tests and 02-path.ts for the combination
+    // gate's own parse-time rejection/acceptance tests. #96's semantics:
+    // a regex primitive evaluates true iff the filtered-against key set (the
+    // matched object's own top-level keys for project; the ancestor keys
+    // traversed along the descent path for path filters) contains at least
+    // one key matching the pattern - an existential match, generalizing the
+    // pre-existing bare-key-presence primitive.
+    describe('regex filter primitive and gated project+drop-keys combination (issues #95, #96)', () => {
+
+        describe('regex primitive standalone in project ({...})', () => {
+
+            it('matches when at least one top-level key matches the pattern', () =>
+                testJson('{"a":{"key1":"x","other":"y"}}', '$.a{/^key\\d+$/}').then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                    expect(array[0].value).to.deep.equal({ key1: 'x', other: 'y' });
+                }));
+
+            it('does not match when no top-level key matches the pattern', () =>
+                testJson('{"a":{"foo":"x","other":"y"}}', '$.a{/^key\\d+$/}').then((array) => {
+                    expect(array).to.have.lengthOf(0);
+                }));
+
+            it('matches existentially - one matching key among several non-matching ones is enough', () =>
+                testJson('{"a":{"key1":1,"key2":2,"other":3}}', '$.a{/^key\\d$/}').then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                    expect(array[0].value).to.deep.equal({ key1: 1, key2: 2, other: 3 });
+                }));
+
+            it('composes with a bare key via && exactly like any other filter primitive', () =>
+                Promise.all([
+                    testJson('{"a":{"foo":1,"key9":2}}', '$.a{foo && /^key\\d+$/}'),
+                    testJson('{"a":{"key9":2}}', '$.a{foo && /^key\\d+$/}'),
+                ]).then(([bothPresent, onlyRegexMatches]) => {
+                    expect(bothPresent).to.have.lengthOf(1);
+                    expect(onlyRegexMatches).to.have.lengthOf(0);
+                }));
+
+            it('composes with a bare key via || exactly like any other filter primitive', () =>
+                testJson('{"a":{"foo":1}}', '$.a{foo || /^key\\d+$/}').then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                }));
+
+            it('an empty pattern (//) matches any object with at least one own key', () =>
+                Promise.all([
+                    testJson('{"a":{"x":1}}', '$.a{//}'),
+                    testJson('{"a":{}}', '$.a{//}'),
+                ]).then(([nonEmpty, empty]) => {
+                    expect(nonEmpty).to.have.lengthOf(1);
+                    expect(empty).to.have.lengthOf(0);
+                }));
+
+            it('treats the pattern as a real regex, not a literal-string match (needs escaping for literal chars)', () =>
+                testJson('{"a":{"a.b":1}}', '$.a{/a\\.b/}').then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                    expect(array[0].value).to.deep.equal({ 'a.b': 1 });
+                }));
+        });
+
+        describe('regex primitive standalone in a path filter (..[<filter>]key)', () => {
+
+            it('gates descent on a regex match over ancestor keys along the descent path', () =>
+                testJson('{"key1":{"target":"v1"},"safe":{"target":"v2"}}', '$..[/^key\\d+$/]target').
+                    then((array) => {
+                        expect(array).to.have.lengthOf(1);
+                        expect(array[0].value).to.equal('v1');
+                    }));
+
+            it('does not gate descent through an ancestor whose key does not match the pattern', () =>
+                testJson('{"safe":{"target":"v2"}}', '$..[/^key\\d+$/]target').then((array) => {
+                    expect(array).to.have.lengthOf(0);
+                }));
+        });
+
+        describe('project + drop-keys combined (only allowed via a regex primitive)', () => {
+
+            it('still rejects a pure-literal combination end-to-end (must not regress #52)', () => {
+                expect(() => yajs('$.a{key1}<key2>')).to.throw(/mutually exclusive/);
+            });
+
+            it('applies the project gate first (against the full object) then drops second, matching manually ' +
+                'chaining "apply project as a predicate, then drop-keys as a transform" as two separate steps', () =>
+                testJson('{"a":{"key1":"x","other":"y"}}', '$.a{/^key\\d+$/}<other>').then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                    expect(array[0].value).to.deep.equal({ key1: 'x' });
+                }));
+
+            it('edge case: a regex-based gate matches on a key that drop-keys then removes - the gate already ' +
+                'fired against the full object, so removal afterward is not a contradiction ($.a{/^key1$/}<key1>)', () =>
+                testJson('{"a":{"key1":"x","other":"y"}}', '$.a{/^key1$/}<key1>').then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                    expect(array[0].value).to.deep.equal({ other: 'y' });
+                }));
+
+            it('never emits when the (regex-gated) project filter itself fails, regardless of drop-keys', () =>
+                testJson('{"a":{"foo":"x"}}', '$.a{/^key\\d+$/}<foo>').then((array) => {
+                    expect(array).to.have.lengthOf(0);
+                }));
+
+            it('composes a bare key && a regex primitive on the project side while combined with drop-keys', () =>
+                testJson('{"a":{"foo":1,"key9":2,"other":3}}', '$.a{foo && /^key\\d+$/}<other>').then((array) => {
+                    expect(array).to.have.lengthOf(1);
+                    expect(array[0].value).to.deep.equal({ foo: 1, key9: 2 });
+                }));
+
+            it('rejects the reversed written order end-to-end even with a regex primitive present', () => {
+                expect(() => yajs('$.a<key2>{/key\\d+/}')).to.throw(/mutually exclusive/);
+            });
+        });
+
+        describe('regex pattern safety/validation', () => {
+
+            it('rejects an invalid regex pattern with a clean, catchable error', () => {
+                expect(() => yajs('$.a{/[/}')).to.throw(/Invalid regex filter pattern/);
+            });
+
+            it('rejects an over-long regex pattern with a clean, catchable error', () => {
+                expect(() => yajs(`$.a{/${'x'.repeat(201)}/}`)).to.throw(/maximum allowed length/);
+            });
+        });
+    });
+
     // Regression tests for GitHub issue #35: a deeply parenthesized filter
     // expression used to overflow the JS call stack (uncaught RangeError)
     // straight out of the synchronous yajs() call, at a nesting depth of

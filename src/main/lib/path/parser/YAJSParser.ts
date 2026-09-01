@@ -40,16 +40,17 @@ export class YAJSParser extends Parser {
 	public static readonly LT=5;
 	public static readonly GT=6;
 	public static readonly Identifier=7;
-	public static readonly FilterExpressionTerm=8;
-	public static readonly ROOT=9;
-	public static readonly DOT=10;
-	public static readonly STAR=11;
-	public static readonly AND=12;
-	public static readonly OR=13;
-	public static readonly NOT=14;
-	public static readonly LP=15;
-	public static readonly RP=16;
-	public static readonly Whitespace=17;
+	public static readonly REGEX=8;
+	public static readonly FilterExpressionTerm=9;
+	public static readonly ROOT=10;
+	public static readonly DOT=11;
+	public static readonly STAR=12;
+	public static readonly AND=13;
+	public static readonly OR=14;
+	public static readonly NOT=15;
+	public static readonly LP=16;
+	public static readonly RP=17;
+	public static readonly Whitespace=18;
 	public static readonly RULE_path = 0;
 	public static readonly RULE_pathStep = 1;
 	public static readonly RULE_actionField = 2;
@@ -66,11 +67,12 @@ export class YAJSParser extends Parser {
 
 	private static readonly _LITERAL_NAMES: (string | undefined)[] = [
 		undefined, "'{'", "'}'", "'['", "']'", "'<'", "'>'", undefined, undefined, 
-		"'$'", "'.'", "'*'", "'&&'", "'||'", "'!'", "'('", "')'"
+		undefined, "'$'", "'.'", "'*'", "'&&'", "'||'", "'!'", "'('", "')'"
 	];
 	private static readonly _SYMBOLIC_NAMES: (string | undefined)[] = [
-		undefined, "LB", "RB", "LSB", "RSB", "LT", "GT", "Identifier", "FilterExpressionTerm", 
-		"ROOT", "DOT", "STAR", "AND", "OR", "NOT", "LP", "RP", "Whitespace"
+		undefined, "LB", "RB", "LSB", "RSB", "LT", "GT", "Identifier", "REGEX", 
+		"FilterExpressionTerm", "ROOT", "DOT", "STAR", "AND", "OR", "NOT", "LP", 
+		"RP", "Whitespace"
 	];
 	public static readonly VOCABULARY: Vocabulary = new VocabularyImpl(YAJSParser._LITERAL_NAMES, YAJSParser._SYMBOLIC_NAMES, []);
 
@@ -266,8 +268,9 @@ export class YAJSParser extends Parser {
 	public pathLeaf(): PathLeafContext {
 		let _localctx: PathLeafContext = new PathLeafContext(this._ctx, this.state);
 		this.enterRule(_localctx, 8, YAJSParser.RULE_pathLeaf);
+		let _la: number;
 		try {
-			this.state = 49;
+			this.state = 55;
 			this._errHandler.sync(this);
 			switch (this._input.LA(1)) {
 			case YAJSParser.LB:
@@ -275,13 +278,33 @@ export class YAJSParser extends Parser {
 				{
 				this.state = 47;
 				this.actionProject();
+				this.state = 49;
+				this._errHandler.sync(this);
+				_la = this._input.LA(1);
+				if (_la===YAJSParser.LT) {
+					{
+					this.state = 48;
+					this.actionDropKeys();
+					}
+				}
+
 				}
 				break;
 			case YAJSParser.LT:
 				this.enterOuterAlt(_localctx, 2);
 				{
-				this.state = 48;
+				this.state = 51;
 				this.actionDropKeys();
+				this.state = 53;
+				this._errHandler.sync(this);
+				_la = this._input.LA(1);
+				if (_la===YAJSParser.LB) {
+					{
+					this.state = 52;
+					this.actionProject();
+					}
+				}
+
 				}
 				break;
 			default:
@@ -309,11 +332,11 @@ export class YAJSParser extends Parser {
 		try {
 			this.enterOuterAlt(_localctx, 1);
 			{
-			this.state = 51;
+			this.state = 57;
 			this.match(YAJSParser.LB);
-			this.state = 52;
+			this.state = 58;
 			this.filterExpression();
-			this.state = 53;
+			this.state = 59;
 			this.match(YAJSParser.RB);
 			}
 		}
@@ -338,11 +361,11 @@ export class YAJSParser extends Parser {
 		try {
 			this.enterOuterAlt(_localctx, 1);
 			{
-			this.state = 55;
+			this.state = 61;
 			this.match(YAJSParser.LT);
-			this.state = 56;
+			this.state = 62;
 			this.filterExpression();
-			this.state = 57;
+			this.state = 63;
 			this.match(YAJSParser.GT);
 			}
 		}
@@ -368,20 +391,20 @@ export class YAJSParser extends Parser {
 		try {
 			this.enterOuterAlt(_localctx, 1);
 			{
-			this.state = 60; 
+			this.state = 66; 
 			this._errHandler.sync(this);
 			_la = this._input.LA(1);
 			do {
 				{
 				{
-				this.state = 59;
+				this.state = 65;
 				this.filterExpressionTerm();
 				}
 				}
-				this.state = 62; 
+				this.state = 68; 
 				this._errHandler.sync(this);
 				_la = this._input.LA(1);
-			} while ( (((_la) & ~0x1F) === 0 && ((1 << _la) & ((1 << YAJSParser.FilterExpressionTerm) | (1 << YAJSParser.AND) | (1 << YAJSParser.OR) | (1 << YAJSParser.NOT) | (1 << YAJSParser.LP))) !== 0) );
+			} while ( (((_la) & ~0x1F) === 0 && ((1 << _la) & ((1 << YAJSParser.REGEX) | (1 << YAJSParser.FilterExpressionTerm) | (1 << YAJSParser.AND) | (1 << YAJSParser.OR) | (1 << YAJSParser.NOT) | (1 << YAJSParser.LP))) !== 0) );
 			}
 		}
 		catch (re) {
@@ -404,14 +427,14 @@ export class YAJSParser extends Parser {
 		this.enterRule(_localctx, 16, YAJSParser.RULE_filterExpressionTerm);
 		let _la: number;
 		try {
-			this.state = 73;
+			this.state = 80;
 			this._errHandler.sync(this);
 			switch (this._input.LA(1)) {
 			case YAJSParser.AND:
 			case YAJSParser.OR:
 				this.enterOuterAlt(_localctx, 1);
 				{
-				this.state = 64;
+				this.state = 70;
 				_localctx._op = this._input.LT(1);
 				_la = this._input.LA(1);
 				if ( !(_la===YAJSParser.AND || _la===YAJSParser.OR) ) {
@@ -424,35 +447,42 @@ export class YAJSParser extends Parser {
 					this._errHandler.reportMatch(this);
 					this.consume();
 				}
-				this.state = 65;
+				this.state = 71;
 				_localctx._term = this.filterExpressionTerm();
 				}
 				break;
 			case YAJSParser.NOT:
 				this.enterOuterAlt(_localctx, 2);
 				{
-				this.state = 66;
+				this.state = 72;
 				_localctx._op = this.match(YAJSParser.NOT);
-				this.state = 67;
+				this.state = 73;
 				_localctx._term = this.filterExpressionTerm();
 				}
 				break;
 			case YAJSParser.LP:
 				this.enterOuterAlt(_localctx, 3);
 				{
-				this.state = 68;
+				this.state = 74;
 				this.match(YAJSParser.LP);
-				this.state = 69;
+				this.state = 75;
 				_localctx._expr = this.filterExpression();
-				this.state = 70;
+				this.state = 76;
 				this.match(YAJSParser.RP);
 				}
 				break;
 			case YAJSParser.FilterExpressionTerm:
 				this.enterOuterAlt(_localctx, 4);
 				{
-				this.state = 72;
+				this.state = 78;
 				_localctx._key = this.match(YAJSParser.FilterExpressionTerm);
+				}
+				break;
+			case YAJSParser.REGEX:
+				this.enterOuterAlt(_localctx, 5);
+				{
+				this.state = 79;
+				_localctx._regex = this.match(YAJSParser.REGEX);
 				}
 				break;
 			default:
@@ -475,37 +505,41 @@ export class YAJSParser extends Parser {
 	}
 
 	public static readonly _serializedATN: string =
-		"\x03\uAF6F\u8320\u479D\uB75C\u4880\u1605\u191C\uAB37\x03\x13N\x04\x02"+
+		"\x03\uAF6F\u8320\u479D\uB75C\u4880\u1605\u191C\uAB37\x03\x14U\x04\x02"+
 		"\t\x02\x04\x03\t\x03\x04\x04\t\x04\x04\x05\t\x05\x04\x06\t\x06\x04\x07"+
 		"\t\x07\x04\b\t\b\x04\t\t\t\x04\n\t\n\x03\x02\x03\x02\x07\x02\x17\n\x02"+
 		"\f\x02\x0E\x02\x1A\v\x02\x03\x02\x05\x02\x1D\n\x02\x03\x02\x03\x02\x03"+
 		"\x03\x03\x03\x05\x03#\n\x03\x03\x03\x05\x03&\n\x03\x03\x03\x03\x03\x03"+
 		"\x04\x03\x04\x05\x04,\n\x04\x03\x05\x03\x05\x03\x05\x03\x05\x03\x06\x03"+
-		"\x06\x05\x064\n\x06\x03\x07\x03\x07\x03\x07\x03\x07\x03\b\x03\b\x03\b"+
-		"\x03\b\x03\t\x06\t?\n\t\r\t\x0E\t@\x03\n\x03\n\x03\n\x03\n\x03\n\x03\n"+
-		"\x03\n\x03\n\x03\n\x05\nL\n\n\x03\n\x02\x02\x02\v\x02\x02\x04\x02\x06"+
-		"\x02\b\x02\n\x02\f\x02\x0E\x02\x10\x02\x12\x02\x02\x03\x03\x02\x0E\x0F"+
-		"N\x02\x14\x03\x02\x02\x02\x04 \x03\x02\x02\x02\x06+\x03\x02\x02\x02\b"+
-		"-\x03\x02\x02\x02\n3\x03\x02\x02\x02\f5\x03\x02\x02\x02\x0E9\x03\x02\x02"+
-		"\x02\x10>\x03\x02\x02\x02\x12K\x03\x02\x02\x02\x14\x18\x07\v\x02\x02\x15"+
-		"\x17\x05\x04\x03\x02\x16\x15\x03\x02\x02\x02\x17\x1A\x03\x02\x02\x02\x18"+
-		"\x16\x03\x02\x02\x02\x18\x19\x03\x02\x02\x02\x19\x1C\x03\x02\x02\x02\x1A"+
-		"\x18\x03\x02\x02\x02\x1B\x1D\x05\n\x06\x02\x1C\x1B\x03\x02\x02\x02\x1C"+
-		"\x1D\x03\x02\x02\x02\x1D\x1E\x03\x02\x02\x02\x1E\x1F\x07\x02\x02\x03\x1F"+
-		"\x03\x03\x02\x02\x02 \"\x07\f\x02\x02!#\x07\f\x02\x02\"!\x03\x02\x02\x02"+
-		"\"#\x03\x02\x02\x02#%\x03\x02\x02\x02$&\x05\b\x05\x02%$\x03\x02\x02\x02"+
-		"%&\x03\x02\x02\x02&\'\x03\x02\x02\x02\'(\x05\x06\x04\x02(\x05\x03\x02"+
-		"\x02\x02),\x07\r\x02\x02*,\x07\t\x02\x02+)\x03\x02\x02\x02+*\x03\x02\x02"+
-		"\x02,\x07\x03\x02\x02\x02-.\x07\x05\x02\x02./\x05\x10\t\x02/0\x07\x06"+
-		"\x02\x020\t\x03\x02\x02\x0214\x05\f\x07\x0224\x05\x0E\b\x0231\x03\x02"+
-		"\x02\x0232\x03\x02\x02\x024\v\x03\x02\x02\x0256\x07\x03\x02\x0267\x05"+
-		"\x10\t\x0278\x07\x04\x02\x028\r\x03\x02\x02\x029:\x07\x07\x02\x02:;\x05"+
-		"\x10\t\x02;<\x07\b\x02\x02<\x0F\x03\x02\x02\x02=?\x05\x12\n\x02>=\x03"+
-		"\x02\x02\x02?@\x03\x02\x02\x02@>\x03\x02\x02\x02@A\x03\x02\x02\x02A\x11"+
-		"\x03\x02\x02\x02BC\t\x02\x02\x02CL\x05\x12\n\x02DE\x07\x10\x02\x02EL\x05"+
-		"\x12\n\x02FG\x07\x11\x02\x02GH\x05\x10\t\x02HI\x07\x12\x02\x02IL\x03\x02"+
-		"\x02\x02JL\x07\n\x02\x02KB\x03\x02\x02\x02KD\x03\x02\x02\x02KF\x03\x02"+
-		"\x02\x02KJ\x03\x02\x02\x02L\x13\x03\x02\x02\x02\n\x18\x1C\"%+3@K";
+		"\x06\x05\x064\n\x06\x03\x06\x03\x06\x05\x068\n\x06\x05\x06:\n\x06\x03"+
+		"\x07\x03\x07\x03\x07\x03\x07\x03\b\x03\b\x03\b\x03\b\x03\t\x06\tE\n\t"+
+		"\r\t\x0E\tF\x03\n\x03\n\x03\n\x03\n\x03\n\x03\n\x03\n\x03\n\x03\n\x03"+
+		"\n\x05\nS\n\n\x03\n\x02\x02\x02\v\x02\x02\x04\x02\x06\x02\b\x02\n\x02"+
+		"\f\x02\x0E\x02\x10\x02\x12\x02\x02\x03\x03\x02\x0F\x10X\x02\x14\x03\x02"+
+		"\x02\x02\x04 \x03\x02\x02\x02\x06+\x03\x02\x02\x02\b-\x03\x02\x02\x02"+
+		"\n9\x03\x02\x02\x02\f;\x03\x02\x02\x02\x0E?\x03\x02\x02\x02\x10D\x03\x02"+
+		"\x02\x02\x12R\x03\x02\x02\x02\x14\x18\x07\f\x02\x02\x15\x17\x05\x04\x03"+
+		"\x02\x16\x15\x03\x02\x02\x02\x17\x1A\x03\x02\x02\x02\x18\x16\x03\x02\x02"+
+		"\x02\x18\x19\x03\x02\x02\x02\x19\x1C\x03\x02\x02\x02\x1A\x18\x03\x02\x02"+
+		"\x02\x1B\x1D\x05\n\x06\x02\x1C\x1B\x03\x02\x02\x02\x1C\x1D\x03\x02\x02"+
+		"\x02\x1D\x1E\x03\x02\x02\x02\x1E\x1F\x07\x02\x02\x03\x1F\x03\x03\x02\x02"+
+		"\x02 \"\x07\r\x02\x02!#\x07\r\x02\x02\"!\x03\x02\x02\x02\"#\x03\x02\x02"+
+		"\x02#%\x03\x02\x02\x02$&\x05\b\x05\x02%$\x03\x02\x02\x02%&\x03\x02\x02"+
+		"\x02&\'\x03\x02\x02\x02\'(\x05\x06\x04\x02(\x05\x03\x02\x02\x02),\x07"+
+		"\x0E\x02\x02*,\x07\t\x02\x02+)\x03\x02\x02\x02+*\x03\x02\x02\x02,\x07"+
+		"\x03\x02\x02\x02-.\x07\x05\x02\x02./\x05\x10\t\x02/0\x07\x06\x02\x020"+
+		"\t\x03\x02\x02\x0213\x05\f\x07\x0224\x05\x0E\b\x0232\x03\x02\x02\x023"+
+		"4\x03\x02\x02\x024:\x03\x02\x02\x0257\x05\x0E\b\x0268\x05\f\x07\x0276"+
+		"\x03\x02\x02\x0278\x03\x02\x02\x028:\x03\x02\x02\x0291\x03\x02\x02\x02"+
+		"95\x03\x02\x02\x02:\v\x03\x02\x02\x02;<\x07\x03\x02\x02<=\x05\x10\t\x02"+
+		"=>\x07\x04\x02\x02>\r\x03\x02\x02\x02?@\x07\x07\x02\x02@A\x05\x10\t\x02"+
+		"AB\x07\b\x02\x02B\x0F\x03\x02\x02\x02CE\x05\x12\n\x02DC\x03\x02\x02\x02"+
+		"EF\x03\x02\x02\x02FD\x03\x02\x02\x02FG\x03\x02\x02\x02G\x11\x03\x02\x02"+
+		"\x02HI\t\x02\x02\x02IS\x05\x12\n\x02JK\x07\x11\x02\x02KS\x05\x12\n\x02"+
+		"LM\x07\x12\x02\x02MN\x05\x10\t\x02NO\x07\x13\x02\x02OS\x03\x02\x02\x02"+
+		"PS\x07\v\x02\x02QS\x07\n\x02\x02RH\x03\x02\x02\x02RJ\x03\x02\x02\x02R"+
+		"L\x03\x02\x02\x02RP\x03\x02\x02\x02RQ\x03\x02\x02\x02S\x13\x03\x02\x02"+
+		"\x02\f\x18\x1C\"%+379FR";
 	public static __ATN: ATN;
 	public static get _ATN(): ATN {
 		if (!YAJSParser.__ATN) {
@@ -704,6 +738,7 @@ export class FilterExpressionTermContext extends ParserRuleContext {
 	public _term: FilterExpressionTermContext;
 	public _expr: FilterExpressionContext;
 	public _key: Token;
+	public _regex: Token;
 	public filterExpressionTerm(): FilterExpressionTermContext | undefined {
 		return this.tryGetRuleContext(0, FilterExpressionTermContext);
 	}
@@ -716,6 +751,7 @@ export class FilterExpressionTermContext extends ParserRuleContext {
 		return this.tryGetRuleContext(0, FilterExpressionContext);
 	}
 	public FilterExpressionTerm(): TerminalNode | undefined { return this.tryGetToken(YAJSParser.FilterExpressionTerm, 0); }
+	public REGEX(): TerminalNode | undefined { return this.tryGetToken(YAJSParser.REGEX, 0); }
 	constructor(parent: ParserRuleContext, invokingState: number);
 	constructor(parent: ParserRuleContext, invokingState: number) {
 		super(parent, invokingState);

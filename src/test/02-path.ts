@@ -1284,4 +1284,39 @@ describe('path match', () => {
         });
     });
 
+    // Regression/coverage tests for GitHub issue #95's amended scope: the
+    // pure-literal mutual-exclusivity restriction above stays in place, but
+    // combining project and drop-keys is now allowed - in the
+    // project-then-drop-keys written order only - when at least one side
+    // uses issue #96's regex primitive.
+    describe('project and drop-keys combined, regex-gated (issue #95 amended by #96)', () => {
+
+        it('still throws for a pure-literal combination with no regex anywhere (must not regress #52\'s own restriction)', () => {
+            expect(() => YAJSPath.parse('$.a{key1}<key2>')).to.throw(/mutually exclusive/);
+        });
+
+        it('allows the combination when the project side uses a regex primitive', () => {
+            expect(() => YAJSPath.parse('$.a{/key\\d+/}<key2>')).to.not.throw();
+        });
+
+        it('allows the combination when the project side is a bare key OR-ed with a regex primitive', () => {
+            expect(() => YAJSPath.parse('$.a{key1 || /key\\d+/}<key2>')).to.not.throw();
+        });
+
+        it('still throws for the reversed written order even when a regex primitive is used ' +
+            '(only project-then-drop-keys is ever combinable)', () => {
+            expect(() => YAJSPath.parse('$.a<key2>{/key\\d+/}')).to.throw(/mutually exclusive/);
+        });
+
+        it('carries both the project expression and the drop-keys list on the resulting path once allowed', () => {
+            const path = YAJSPath.parse('$.a{/key\\d+/}<key2>');
+            expect(path.projectKeys).to.deep.equal([ '/key\\d+/' ]);
+            expect(path.dropKeys).to.deep.equal([ 'key2' ]);
+        });
+
+        it('still rejects a regex used inside drop-keys itself (drop-keys stays flat-key-only, issue #29)', () => {
+            expect(() => YAJSPath.parse('$.a{key1}</key2/>')).to.throw(/boolean operators/);
+        });
+    });
+
 });

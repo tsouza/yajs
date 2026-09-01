@@ -5,11 +5,11 @@ import { ChildNode } from './operator/ChildNode';
 import { Descendant } from './operator/Descendant';
 import { Root } from './operator/Root';
 import { Wildcard } from './operator/Wildcard';
-import { assertFlatKeyExpression, assertProjectAndDropKeysNotCombined,
+import { assertFlatKeyExpression, assertProjectAndDropKeysCombinable,
     buildArgsExpression, extractKeys } from './parser/utils';
 import { YAJSLexer } from './parser/YAJSLexer';
 import { ActionDropKeysContext, ActionProjectContext,
-    PathStepContext, YAJSParser } from './parser/YAJSParser';
+    PathLeafContext, PathStepContext, YAJSParser } from './parser/YAJSParser';
 import { PathOperator } from './PathOperator';
 import { PathParent } from './PathParent';
 
@@ -505,8 +505,6 @@ export namespace YAJSPath {
 
     export function parse(path: string): YAJSPath {
 
-        assertProjectAndDropKeysNotCombined(path);
-
         const inputStream = new ANTLRInputStream(path);
         const lexer = new YAJSLexer(inputStream);
         lexer.removeErrorListeners();
@@ -567,6 +565,31 @@ export namespace YAJSPath {
             }
 
             return this.builder;
+        }
+
+        // Issue #95 (amended by #96): pathLeaf's grammar rule (see YAJS.g4)
+        // now parses BOTH a project (`{...}`) and a drop-keys (`<...>`)
+        // clause on the same terminal, in either written order - the
+        // legality of actually combining them is enforced here, before the
+        // default visitChildren() walk below applies whichever of
+        // setProjection()/setDropKeys() the parsed children call.
+        // "Forward order" (project written before drop-keys) is the only
+        // order #95 ever proposed combining (`{key1}<key2>`); a written
+        // order comparison via each child's own start token index - not
+        // string content - is what tells the two apart, since a regex
+        // primitive's pattern text can itself legitimately contain '{' or
+        // '<' characters (see assertProjectAndDropKeysCombinable()'s own
+        // comment in parser/utils.ts for why this moved off a raw substring
+        // check).
+        visitPathLeaf(ctx: PathLeafContext): YAJSPath.Builder {
+            const projectCtx = ctx.actionProject();
+            const dropKeysCtx = ctx.actionDropKeys();
+            if (projectCtx && dropKeysCtx) {
+                const forwardOrder = projectCtx.start.tokenIndex < dropKeysCtx.start.tokenIndex;
+                assertProjectAndDropKeysCombinable(
+                    projectCtx.filterExpression(), dropKeysCtx.filterExpression(), forwardOrder);
+            }
+            return this.visitChildren(ctx);
         }
 
         visitActionProject(ctx: ActionProjectContext): YAJSPath.Builder {

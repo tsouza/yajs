@@ -14,6 +14,16 @@ export abstract class PathOperator {
         return this.parent && this.parent.contains(key);
     }
 
+    // Issue #96: companion to referencedBy() above, collecting every key
+    // name traversed along the ancestor chain instead of testing a single
+    // one - the set the regex filter primitive tests its pattern against
+    // (see AbstractFilteredOperator's use of this).
+    collectAncestorKeys(into: string[]): void {
+        if (this.parent) {
+            this.parent.collectKeys(into);
+        }
+    }
+
     onValue(delegateOnMatch: () => void): void {
         delegateOnMatch();
     }
