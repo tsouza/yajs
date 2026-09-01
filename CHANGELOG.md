@@ -65,6 +65,7 @@ were found and fixed. Issue/PR links: [issues](https://github.com/tsouza/yajs/is
 
 - O(depth²) time blowup in descendant (`..`) matching against deeply nested documents — [#34](https://github.com/tsouza/yajs/issues/34), [PR #43](https://github.com/tsouza/yajs/pull/43)
 - Reduced per-match path-materialization cost (O(depth) per match, compounding across matches) — [#44](https://github.com/tsouza/yajs/issues/44), [PR #47](https://github.com/tsouza/yajs/pull/47)
+- Tokenizer: batch runs of plain-ASCII string content and consecutive number digits into a single materialization call instead of one append per byte (non-ASCII content is unaffected, still routed through the existing incremental UTF-8 decoder) — [#77](https://github.com/tsouza/yajs/issues/77), [PR #82](https://github.com/tsouza/yajs/pull/82)
 
 ### Packaging & types
 

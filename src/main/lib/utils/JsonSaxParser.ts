@@ -538,8 +538,8 @@ export class JsonSaxParser {
         //    inside tdq) terminate the run and are reprocessed by the
         //    per-byte path at their own index, so error positions and
         //    escape/close handling are unchanged.
-        // ASCII is a subset of latin1, so latin1Slice() is a correct (and
-        // allocation-cheap) way to materialize the run.
+        // ASCII is a subset of latin1, so toString('latin1', ...) is a
+        // correct (and allocation-cheap) way to materialize the run.
         if (this.utf8BytesNeeded === 0 && n < 0x80 && n >= 0x20 &&
             n !== 0x22 && (n !== 0x5c || this.tdq)) {
           let j = i + 1;
@@ -556,16 +556,24 @@ export class JsonSaxParser {
               j++;
             }
           }
-          // Materialization strategy: latin1Slice() is one C++ call with a
-          // flat per-call cost regardless of length, while a JS
-          // String.fromCharCode loop costs per character - measured
-          // crossover is in the mid-single-digit chars, so slice only pays
-          // for itself on longer runs (16 leaves comfortable margin). Either way the win over the
-          // per-byte slow path is skipping the outer state dispatch,
-          // appendUtf8Byte() call, and `this.str` accessor round-trip per
-          // content byte.
+          // Materialization strategy: buffer.toString('latin1', i, j) is one
+          // C++ call with a flat per-call cost regardless of length, while a
+          // JS String.fromCharCode loop costs per character - measured
+          // crossover is in the mid-single-digit chars, so slicing only pays
+          // for itself on longer runs (16 leaves comfortable margin). Either
+          // way the win over the per-byte slow path is skipping the outer
+          // state dispatch, appendUtf8Byte() call, and `this.str` accessor
+          // round-trip per content byte.
+          //
+          // Uses the public `buffer.toString('latin1', i, j)` API rather
+          // than the undocumented internal `Buffer#latin1Slice` - measured
+          // ~15-25% more per call (bench-proto/micro-slice.js), but this
+          // path only fires on runs >=16 bytes, where the per-call gap
+          // (tens of ns) is negligible next to the length-dependent copy
+          // itself and next to what the per-byte fallback would have cost.
+          // Not worth trading the public API's stability guarantee for.
           if (j - i >= 16) {
-            this.str += (buffer as any).latin1Slice(i, j);
+            this.str += buffer.toString('latin1', i, j);
           } else {
             let s = this.str;
             for (let k = i; k < j; k++) { s += String.fromCharCode(buffer[k]); }
@@ -687,7 +695,7 @@ export class JsonSaxParser {
           // own index by the ordinary code, so this is behavior-preserving.
           let j = i + 1;
           while (j < l && buffer[j] >= 0x30 && buffer[j] <= 0x39) { j++; }
-          this.numStr += (buffer as any).latin1Slice(i, j);
+          this.numStr += buffer.toString('latin1', i, j);
           i = j - 1;
           continue;
         }
@@ -709,7 +717,7 @@ export class JsonSaxParser {
           // Same digit-run batching as NUMBER3 above.
           let j = i + 1;
           while (j < l && buffer[j] >= 0x30 && buffer[j] <= 0x39) { j++; }
-          this.numStr += (buffer as any).latin1Slice(i, j);
+          this.numStr += buffer.toString('latin1', i, j);
           i = j - 1;
           continue;
         }
@@ -750,7 +758,7 @@ export class JsonSaxParser {
           // Same digit-run batching as NUMBER3 above.
           let j = i + 1;
           while (j < l && buffer[j] >= 0x30 && buffer[j] <= 0x39) { j++; }
-          this.numStr += (buffer as any).latin1Slice(i, j);
+          this.numStr += buffer.toString('latin1', i, j);
           i = j - 1;
           continue;
         }

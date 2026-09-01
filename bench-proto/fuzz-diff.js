@@ -181,6 +181,70 @@ const adversarial = [
   ['kitchen-sink', '{"k1":"v1","k2":[1,2.5,true,false,null,{"n":"\\u00e9"},"""x"""],"k3":{"a":{"b":[]}}}'],
   ['long-ascii-str', '"' + 'abcdefghij'.repeat(50) + '"'],
   ['long-str-escapes', '"' + 'abc\\n'.repeat(40) + '"'],
+
+  // ---- targeted additions: fast-path entry guard (ASCII arriving
+  // mid-UTF-8-sequence) and the STRING1 fast path's 16-byte
+  // latin1Slice/fromCharCode threshold + triple-quote span rules ----
+
+  // ASCII byte immediately following an *aborted* multi-byte lead, for
+  // every lead-byte class (2/3/4-byte), both with the ASCII run short
+  // (below the slice threshold) and long (above it) so the fast path's
+  // `utf8BytesNeeded === 0` entry guard is exercised right at the
+  // boundary where a batch would otherwise have started.
+  ['ascii-after-aborted-2byte-short', B('"', Buffer.from([0xc3]), 'ab"')],
+  ['ascii-after-aborted-2byte-long', B('"', Buffer.from([0xc3]), 'abcdefghijklmnopqrstuvwxyz"')],
+  ['ascii-after-aborted-3byte-short', B('"', Buffer.from([0xe2, 0x82]), 'ab"')],
+  ['ascii-after-aborted-3byte-long', B('"', Buffer.from([0xe2, 0x82]), 'abcdefghijklmnopqrstuvwxyz"')],
+  ['ascii-after-aborted-4byte-short', B('"', Buffer.from([0xf0, 0x9f, 0x98]), 'ab"')],
+  ['ascii-after-aborted-4byte-long', B('"', Buffer.from([0xf0, 0x9f, 0x98]), 'abcdefghijklmnopqrstuvwxyz"')],
+  // A long ASCII run (would batch) followed directly by a lead byte whose
+  // continuation is itself immediately aborted by another ASCII run - two
+  // fast-path batches sandwiching a broken sequence, back to back.
+  ['ascii-sandwich-aborted-utf8', B('"abcdefghijklmnop', Buffer.from([0xe2, 0x28]), 'qrstuvwxyzabcdefg"')],
+  // Lead byte split across a chunk boundary (only meaningful under
+  // checkAllSplits, which tries every split point) immediately followed
+  // by plain ASCII that must NOT fast-path (utf8BytesNeeded > 0 across
+  // the chunk boundary).
+  ['ascii-after-split-lead-2byte', B('"z', Buffer.from([0xc3]), 'q"')],
+  ['ascii-after-split-lead-3byte', B('"z', Buffer.from([0xe2, 0x82]), 'q"')],
+  // Valid multi-byte sequence immediately followed by a long ASCII run,
+  // both short and long enough to cross the 16-byte slice threshold -
+  // makes sure the fast path correctly re-engages right after
+  // appendUtf8Byte() resets utf8BytesNeeded back to 0.
+  ['ascii-after-valid-utf8-short', B('"', Buffer.from('é', 'utf8'), 'ab"')],
+  ['ascii-after-valid-utf8-long', B('"', Buffer.from('é', 'utf8'), 'abcdefghijklmnopqrstuvwxyz"')],
+
+  // STRING1 fast-path materialization threshold (`j - i >= 16`): exact
+  // boundary runs, both plain and inside tdq mode, so an off-by-one in
+  // the threshold or in either scan loop would show up as a length/content
+  // mismatch rather than just a benign perf difference.
+  ['ascii-run-len-15', '"' + 'a'.repeat(15) + '"'],
+  ['ascii-run-len-16', '"' + 'a'.repeat(16) + '"'],
+  ['ascii-run-len-17', '"' + 'a'.repeat(17) + '"'],
+  ['tdq-run-len-15', '"""' + 'a'.repeat(15) + '"""'],
+  ['tdq-run-len-16', '"""' + 'a'.repeat(16) + '"""'],
+  ['tdq-run-len-17', '"""' + 'a'.repeat(17) + '"""'],
+
+  // Digit-run batching (NUMBER3/5/8) threshold, same idea.
+  ['num-digitrun-len-15', '1' + '2'.repeat(14)],
+  ['num-digitrun-len-16', '1' + '2'.repeat(15)],
+  ['num-digitrun-len-17', '1' + '2'.repeat(16)],
+  ['num-frac-digitrun-16', '1.' + '2'.repeat(16)],
+  ['num-exp-digitrun-16', '1e' + '2'.repeat(16)],
+
+  // Triple-quote span rules: backslash-as-literal, embedded lone `"`, and
+  // CR/LF-in-run all crossing the 16-byte threshold, since the tdq scan
+  // loop duplicates the slow path's acceptance set in a place the two
+  // could independently drift (per the issue's risk list).
+  ['tdq-backslash-long-run', '"""' + 'a\\b'.repeat(10) + '"""'],
+  ['tdq-single-quote-long-run', '"""' + 'a"b'.repeat(10) + '"""'],
+  ['tdq-crlf-long-run', '"""' + 'line\r\n'.repeat(6) + '"""'],
+  ['tdq-ctrl-long-run', '"""' + ('a'.repeat(14) + '\x01') + '"""'],
+  // Fast path must not engage on the *closing* triple quote even when the
+  // preceding content run is long enough to slice right up to it.
+  ['tdq-long-then-close', '"""' + 'x'.repeat(20) + '"""'],
+  // Escape sequence immediately preceded by a run long enough to slice.
+  ['esc-after-long-run', '"' + 'a'.repeat(20) + '\\n"'],
 ];
 
 for (const [label, doc] of adversarial) { checkAllSplits(label, doc); }
